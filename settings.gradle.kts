@@ -1,0 +1,1 @@
+rootProject.name = "tate-yoko-pdf"
