@@ -62,3 +62,7 @@ typos:
 # Remove build outputs
 clean:
     docker compose run --rm dev ./gradlew clean
+
+# Report outdated deps (Gradle deps/plugins + Dockerfile/spotless/jacoco/security pins)
+outdated:
+    docker compose run --rm dev ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates

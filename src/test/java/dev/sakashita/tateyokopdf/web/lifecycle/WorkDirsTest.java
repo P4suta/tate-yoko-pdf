@@ -10,7 +10,9 @@ import org.junit.jupiter.api.io.TempDir;
 
 final class WorkDirsTest {
 
+  // Deliberately passes null to a non-null param to exercise the runtime guard.
   @Test
+  @SuppressWarnings("NullAway")
   void deleteQuietlyHandlesNull() {
     assertThatNoException().isThrownBy(() -> WorkDirs.deleteQuietly(null));
   }

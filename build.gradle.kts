@@ -1,5 +1,8 @@
+import com.github.benmanes.gradle.versions.updates.DependencyUpdatesTask
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
+import java.net.HttpURLConnection
+import java.net.URI
 
 // Apply security patches to the buildscript (plugin) classpath so Dependabot
 // alerts on transitive deps like plexus-utils / log4j-core / jackson-core
@@ -7,9 +10,9 @@ import net.ltgt.gradle.errorprone.errorprone
 buildscript {
     val patches =
         mapOf(
-            "com.fasterxml.jackson.core:jackson-core" to "2.18.6",
-            "org.codehaus.plexus:plexus-utils" to "4.0.3",
-            "org.apache.logging.log4j:log4j-core" to "2.25.4",
+            "com.fasterxml.jackson.core:jackson-core" to "2.19.0",
+            "org.codehaus.plexus:plexus-utils" to "4.0.2",
+            "org.apache.logging.log4j:log4j-core" to "2.26.0",
         )
     configurations.configureEach {
         resolutionStrategy.eachDependency {
@@ -112,7 +115,8 @@ tasks.withType<JavaCompile>().configureEach {
     options.errorprone {
         disableWarningsInGeneratedCode = true
         excludedPaths = ".*/build/generated/.*"
-        check("NullAway", CheckSeverity.WARN)
+        // Zero-warning policy: NullAway findings break the build instead of being whispered as warnings.
+        check("NullAway", CheckSeverity.ERROR)
         option("NullAway:AnnotatedPackages", "dev.sakashita.tateyokopdf")
         option("NullAway:JSpecifyMode", "true")
         option("NullAway:ExternalInitAnnotations", "picocli.CommandLine.Command")
@@ -128,9 +132,9 @@ jacoco {
 // `buildscript {}` block.)
 val securityPatches =
     mapOf(
-        "com.fasterxml.jackson.core:jackson-core" to "2.18.6",
-        "org.codehaus.plexus:plexus-utils" to "4.0.3",
-        "org.apache.logging.log4j:log4j-core" to "2.25.4",
+        "com.fasterxml.jackson.core:jackson-core" to "2.19.0",
+        "org.codehaus.plexus:plexus-utils" to "4.0.2",
+        "org.apache.logging.log4j:log4j-core" to "2.26.0",
     )
 
 configurations.all {
@@ -147,9 +151,12 @@ tasks.test {
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
     forkEvery = 0
     // system-stubs needs reflective access to mutate env vars on JDK 17+.
+    // -Xshare:off silences the JVM CDS warning that fires when jacoco's javaagent
+    // appends to the bootstrap classpath.
     jvmArgs(
         "--add-opens=java.base/java.util=ALL-UNNAMED",
         "--add-opens=java.base/java.lang=ALL-UNNAMED",
+        "-Xshare:off",
     )
     testLogging {
         events("failed")
@@ -282,6 +289,203 @@ tasks.jacocoTestCoverageVerification {
 }
 
 tasks.check { dependsOn(tasks.jacocoTestCoverageVerification) }
+
+// ---- `just outdated` plumbing -------------------------------------------------
+// 1. ben-manes.versions: only show stable upgrades (skip alpha/beta/rc/M*/SNAPSHOT)
+// 2. checkExtraVersions: diff non-Gradle pins (Dockerfile, spotless, jacoco,
+//    security-patch coords) against upstream stable releases via GitHub Releases
+//    + Maven Central. Wired as a finalizer of dependencyUpdates so a single
+//    `./gradlew dependencyUpdates` reports everything.
+//
+// `just outdated` is the entry point; this block only configures the tasks.
+
+fun isNonStable(version: String): Boolean {
+    val stableKeyword = listOf("RELEASE", "FINAL", "GA").any { version.uppercase().contains(it) }
+    val regex = "^[0-9,.v-]+(-r)?$".toRegex()
+    return !stableKeyword && !regex.matches(version)
+}
+
+tasks.withType<DependencyUpdatesTask>().configureEach {
+    rejectVersionIf { isNonStable(candidate.version) }
+    outputFormatter = "plain"
+    checkForGradleUpdate = true
+    finalizedBy("checkExtraVersions")
+    // ben-manes 0.54 uses Task.project / non-serializable lambdas, so `just outdated`
+    // is invoked with --no-configuration-cache.
+}
+
+tasks.register("checkExtraVersions") {
+    group = "help"
+    description = "Diff non-Gradle pinned versions against upstream stable releases"
+    // Capture files and properties at configuration time so doLast doesn't hold
+    // a Project reference (keeps the task config-cache compatible despite network IO).
+    val dockerfile = rootProject.file("Dockerfile")
+    val buildScript = rootProject.file("build.gradle.kts")
+    val failOnUpdates =
+        providers.gradleProperty("failOnUpdates").map { it.toBoolean() }.getOrElse(false)
+    outputs.upToDateWhen { false }
+
+    doLast {
+        val dockerfileText = dockerfile.readText()
+        val buildScriptText = buildScript.readText()
+        val knownDockerArgs = setOf("TYPOS_VERSION", "JUST_VERSION")
+
+        val stableRe = Regex("^[0-9]+(\\.[0-9]+)*$")
+
+        fun parseVersion(v: String): List<Int> = v.split(".").map { it.toIntOrNull() ?: 0 }
+
+        val versionComparator =
+            Comparator<String> { a, b ->
+                val pa = parseVersion(a)
+                val pb = parseVersion(b)
+                (0 until maxOf(pa.size, pb.size))
+                    .map { pa.getOrElse(it) { 0 }.compareTo(pb.getOrElse(it) { 0 }) }
+                    .firstOrNull { it != 0 } ?: 0
+            }
+
+        fun fetch(url: String): String? =
+            runCatching {
+                (URI(url).toURL().openConnection() as HttpURLConnection).run {
+                    connectTimeout = 10_000
+                    readTimeout = 10_000
+                    setRequestProperty("User-Agent", "tate-yoko-pdf-checkExtraVersions")
+                    setRequestProperty("Accept", "application/json")
+                    inputStream.use { it.bufferedReader().readText() }
+                }
+            }.getOrNull()
+
+        fun latestGitHub(repo: String): String? {
+            val body = fetch("https://api.github.com/repos/$repo/releases/latest") ?: return null
+            val tag =
+                Regex("\"tag_name\"\\s*:\\s*\"([^\"]+)\"")
+                    .find(body)
+                    ?.groupValues
+                    ?.get(1) ?: return null
+            return tag.removePrefix("v")
+        }
+
+        fun latestMaven(
+            group: String,
+            artifact: String,
+        ): String? {
+            val url = "https://search.maven.org/solrsearch/select?q=g:%22$group%22+AND+a:%22$artifact%22&core=gav&rows=200&wt=json"
+            val body = fetch(url) ?: return null
+            return Regex("\"v\"\\s*:\\s*\"([^\"]+)\"")
+                .findAll(body)
+                .map { it.groupValues[1] }
+                .filter { stableRe.matches(it) }
+                .maxWithOrNull(versionComparator)
+        }
+
+        fun dockerArg(name: String): String =
+            Regex("^ARG ${Regex.escape(name)}=(\\S+)", RegexOption.MULTILINE)
+                .find(dockerfileText)
+                ?.groupValues
+                ?.get(1)
+                ?: error("Dockerfile is missing ARG $name=")
+
+        // Find all occurrences so duplicated maps (e.g. the buildscript pin map +
+        // the runtime configurations.all pin map) are detected when they drift apart.
+        // Filter to version-shaped captures so this script's own regex literals
+        // (which themselves contain the patterns) don't self-match.
+        fun extractFromBuild(pattern: String): String {
+            val matches =
+                Regex(pattern)
+                    .findAll(buildScriptText)
+                    .map { it.groupValues[1] }
+                    .filter { stableRe.matches(it) }
+                    .toList()
+            return when {
+                matches.isEmpty() -> error("build.gradle.kts is missing /$pattern/")
+                matches.distinct().size == 1 -> matches.first()
+                else -> matches.joinToString("/") // visual mismatch flag in the report
+            }
+        }
+
+        var updates = 0
+        var headCount = 0
+
+        fun report(
+            name: String,
+            current: String,
+            latest: String?,
+        ) {
+            val tag =
+                when {
+                    latest == null -> {
+                        "ERR "
+                    }
+
+                    current == latest -> {
+                        "OK  "
+                    }
+
+                    versionComparator.compare(current, latest) > 0 -> {
+                        headCount++
+                        "HEAD"
+                    }
+
+                    else -> {
+                        updates++
+                        "UPD "
+                    }
+                }
+            println("[%s] %-22s current=%-12s latest=%s".format(tag, name, current, latest ?: "(fetch failed)"))
+        }
+
+        println()
+        println("=== Extra pinned versions (non-Gradle) ===")
+        report("typos", dockerArg("TYPOS_VERSION"), latestGitHub("crate-ci/typos"))
+        report("just", dockerArg("JUST_VERSION"), latestGitHub("casey/just"))
+        report(
+            "google-java-format",
+            extractFromBuild("""googleJavaFormat\("([^"]+)"\)"""),
+            latestGitHub("google/google-java-format"),
+        )
+        report(
+            "jacoco",
+            extractFromBuild("""toolVersion = "([^"]+)""""),
+            latestMaven("org.jacoco", "jacoco"),
+        )
+
+        println("--- security-patch pins (manual floors; bump when upstream catches up) ---")
+        val securityPins =
+            listOf(
+                Triple("jackson-core", "com.fasterxml.jackson.core", "jackson-core"),
+                Triple("plexus-utils", "org.codehaus.plexus", "plexus-utils"),
+                Triple("log4j-core", "org.apache.logging.log4j", "log4j-core"),
+            )
+        for ((label, g, a) in securityPins) {
+            val current = extractFromBuild(""""${Regex.escape("$g:$a")}"\s+to\s+"([^"]+)"""")
+            report(label, current, latestMaven(g, a))
+        }
+
+        val unknownDockerArgs =
+            Regex("^ARG ([A-Z_]+_VERSION)=", RegexOption.MULTILINE)
+                .findAll(dockerfileText)
+                .map { it.groupValues[1] }
+                .filter { it !in knownDockerArgs }
+                .toList()
+        if (unknownDockerArgs.isNotEmpty()) {
+            println()
+            for (arg in unknownDockerArgs) {
+                println("WARN: unknown pinned version in Dockerfile: ARG $arg=… (add to knownDockerArgs in build.gradle.kts)")
+            }
+        }
+
+        println()
+        println("$updates update(s) available")
+
+        val totalProblems = updates + headCount + unknownDockerArgs.size
+        if (failOnUpdates && totalProblems > 0) {
+            throw GradleException(
+                "$totalProblems pin(s) need attention (updates=$updates, head=$headCount, unknown=${unknownDockerArgs.size}). " +
+                    "Re-run without -PfailOnUpdates=true to see the report and resolve.",
+            )
+        }
+    }
+}
+// ---- end `just outdated` plumbing --------------------------------------------
 
 tasks.shadowJar {
     archiveBaseName = "tate-yoko-pdf"
