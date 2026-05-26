@@ -74,8 +74,19 @@ jobs:
         run: |
           echo "DEV_UID=$(id -u)" >> "$GITHUB_ENV"
           echo "DEV_GID=$(id -g)" >> "$GITHUB_ENV"
-      - name: Build dev container (Liberica NIK)
-        run: docker compose build dev
+      - uses: docker/setup-buildx-action@v3
+      - name: Build dev image (BuildKit + GHA cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: dev
+          tags: tate-yoko-pdf-dev:latest
+          load: true
+          cache-from: type=gha,scope=dev-image
+          cache-to: type=gha,scope=dev-image,mode=max
+          build-args: |
+            DEV_UID=${{ env.DEV_UID }}
+            DEV_GID=${{ env.DEV_GID }}
       - name: Native compile via Docker
         run: docker compose run --rm dev ./gradlew nativeCompile createSamplePdf --no-daemon
       - name: Native CLI smoke (real PDF conversion)
