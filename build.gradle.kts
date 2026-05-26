@@ -1,6 +1,23 @@
 import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 
+// Apply security patches to the buildscript (plugin) classpath so Dependabot
+// alerts on transitive deps like plexus-utils / log4j-core / jackson-core
+// are resolved even though they only appear via Gradle plugins.
+buildscript {
+    val patches =
+        mapOf(
+            "com.fasterxml.jackson.core:jackson-core" to "2.18.6",
+            "org.codehaus.plexus:plexus-utils" to "4.0.3",
+            "org.apache.logging.log4j:log4j-core" to "2.25.4",
+        )
+    configurations.configureEach {
+        resolutionStrategy.eachDependency {
+            patches["${requested.group}:${requested.name}"]?.let { useVersion(it) }
+        }
+    }
+}
+
 plugins {
     java
     application
@@ -104,6 +121,22 @@ tasks.withType<JavaCompile>().configureEach {
 
 jacoco {
     toolVersion = "0.8.13"
+}
+
+// Dependabot security alerts: pin transitive deps on every runtime/test
+// configuration. (The buildscript classpath is patched in the top-level
+// `buildscript {}` block.)
+val securityPatches =
+    mapOf(
+        "com.fasterxml.jackson.core:jackson-core" to "2.18.6",
+        "org.codehaus.plexus:plexus-utils" to "4.0.3",
+        "org.apache.logging.log4j:log4j-core" to "2.25.4",
+    )
+
+configurations.all {
+    resolutionStrategy.eachDependency {
+        securityPatches["${requested.group}:${requested.name}"]?.let { useVersion(it) }
+    }
 }
 
 tasks.test {
