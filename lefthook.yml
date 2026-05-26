@@ -6,7 +6,7 @@ pre-commit:
       run: docker compose run --rm -T dev ./gradlew spotlessApply --quiet
       stage_fixed: true
     typos-fix:
-      run: typos --write-changes {staged_files}
+      run: docker compose run --rm -T dev typos --write-changes {staged_files}
       stage_fixed: true
 
 pre-push:
@@ -15,4 +15,4 @@ pre-push:
     check:
       run: docker compose run --rm -T dev ./gradlew check --quiet
     typos:
-      run: typos
+      run: docker compose run --rm -T dev typos

@@ -2,9 +2,19 @@ ARG GRAALVM_IMAGE=ghcr.io/graalvm/native-image-community:25
 
 FROM ${GRAALVM_IMAGE} AS dev
 
-RUN (microdnf install -y findutils tar gzip git unzip which procps-ng shadow-utils && microdnf clean all) \
- || (dnf install -y findutils tar gzip git unzip which procps-ng shadow-utils && dnf clean all) \
- || (yum install -y findutils tar gzip git unzip which procps-ng shadow-utils && yum clean all)
+RUN (microdnf install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && microdnf clean all) \
+ || (dnf install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && dnf clean all) \
+ || (yum install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && yum clean all)
+
+ARG TYPOS_VERSION=1.46.3
+RUN curl -fsSL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+  | tar -xz -C /usr/local/bin ./typos \
+ && chmod +x /usr/local/bin/typos
+
+ARG JUST_VERSION=1.51.0
+RUN curl -fsSL "https://github.com/casey/just/releases/download/${JUST_VERSION}/just-${JUST_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+  | tar -xz -C /usr/local/bin just \
+ && chmod +x /usr/local/bin/just
 
 ARG DEV_UID=1000
 ARG DEV_GID=1000

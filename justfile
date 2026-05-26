@@ -53,11 +53,11 @@ sample-pdf:
 
 # Auto-fix typos across the repo
 typos-fix:
-    typos --write-changes
+    docker compose run --rm dev typos --write-changes
 
 # Report typos without auto-fixing
 typos:
-    typos
+    docker compose run --rm dev typos
 
 # Remove build outputs
 clean:
