@@ -1,6 +1,8 @@
 package dev.sakashita.tateyokopdf.web;
 
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
+import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
+import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import gg.jte.ContentType;
@@ -8,6 +10,7 @@ import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
 import java.net.ServerSocket;
 import java.net.URI;
+import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +20,8 @@ public final class WebLauncher {
   private static final Logger log = LoggerFactory.getLogger(WebLauncher.class);
 
   private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
+  private static final Duration JOB_TTL = Duration.ofHours(1);
+  private static final Duration GC_SWEEP_INTERVAL = Duration.ofMinutes(1);
 
   public void run() {
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
@@ -26,6 +31,9 @@ public final class WebLauncher {
     JobRegistry registry = new JobRegistry();
     PageController pages = new PageController(engine);
     JobController jobs = new JobController(registry, engine);
+
+    TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
+    gc.start();
 
     Javalin app =
         Javalin.create(
@@ -51,8 +59,13 @@ public final class WebLauncher {
             new Thread(
                 () -> {
                   log.info("Shutting down web server");
-                  app.stop();
-                  shutdown.countDown();
+                  try {
+                    app.stop();
+                  } finally {
+                    gc.stop();
+                    registry.drainAll().forEach(job -> WorkDirs.deleteQuietly(job.workDir()));
+                    shutdown.countDown();
+                  }
                 },
                 "tate-yoko-shutdown"));
 

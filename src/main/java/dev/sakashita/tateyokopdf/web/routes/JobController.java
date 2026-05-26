@@ -12,11 +12,13 @@ import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.job.NoOpProgressListener;
+import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import gg.jte.TemplateEngine;
 import gg.jte.output.StringOutput;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.UploadedFile;
+import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URLEncoder;
@@ -95,12 +97,12 @@ public final class JobController {
       service.execute(options);
     } catch (SpreadException e) {
       log.warn("Spread failed for {}: {}", originalName, e.getMessage());
-      cleanupQuietly(workDir);
+      WorkDirs.deleteQuietly(workDir);
       renderError(ctx, Objects.requireNonNullElse(e.getMessage(), "原因不明のエラー"));
       return;
     } catch (RuntimeException e) {
       log.error("Unexpected error during spread for {}", originalName, e);
-      cleanupQuietly(workDir);
+      WorkDirs.deleteQuietly(workDir);
       renderError(
           ctx,
           "予期しないエラーが発生しました: "
@@ -150,15 +152,29 @@ public final class JobController {
     }
 
     long size;
-    InputStream stream;
+    InputStream raw;
     try {
       size = Files.size(output);
-      stream = Files.newInputStream(output);
+      raw = Files.newInputStream(output);
     } catch (IOException e) {
       log.error("Failed to open output for job {}", id, e);
       ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Failed to read output");
       return;
     }
+
+    InputStream stream =
+        new FilterInputStream(raw) {
+          @Override
+          public void close() throws IOException {
+            try {
+              super.close();
+            } finally {
+              registry.remove(id);
+              WorkDirs.deleteQuietly(job.workDir());
+              log.debug("Cleaned up job {} after download", id);
+            }
+          }
+        };
 
     ctx.contentType("application/pdf");
     ctx.header(
@@ -181,22 +197,5 @@ public final class JobController {
     var out = new StringOutput();
     engine.render("error.jte", Map.of("message", message), out);
     ctx.status(HttpStatus.UNPROCESSABLE_CONTENT).html(out.toString());
-  }
-
-  private static void cleanupQuietly(Path workDir) {
-    try (var paths = Files.walk(workDir)) {
-      paths
-          .sorted((a, b) -> b.getNameCount() - a.getNameCount())
-          .forEach(
-              p -> {
-                try {
-                  Files.deleteIfExists(p);
-                } catch (IOException e) {
-                  log.debug("Failed to delete {}: {}", p, e.getMessage());
-                }
-              });
-    } catch (IOException e) {
-      log.debug("Failed to walk {}: {}", workDir, e.getMessage());
-    }
   }
 }
