@@ -132,9 +132,9 @@ jacoco {
 // `buildscript {}` block.)
 val securityPatches =
     mapOf(
-        "com.fasterxml.jackson.core:jackson-core" to "2.18.6",
-        "org.codehaus.plexus:plexus-utils" to "4.0.3",
-        "org.apache.logging.log4j:log4j-core" to "2.25.4",
+        "com.fasterxml.jackson.core:jackson-core" to "2.19.0",
+        "org.codehaus.plexus:plexus-utils" to "4.0.2",
+        "org.apache.logging.log4j:log4j-core" to "2.26.0",
     )
 
 configurations.all {
@@ -382,9 +382,23 @@ tasks.register("checkExtraVersions") {
                 ?.get(1)
                 ?: error("Dockerfile is missing ARG $name=")
 
-        fun extractFromBuild(pattern: String): String =
-            Regex(pattern).find(buildScriptText)?.groupValues?.get(1)
-                ?: error("build.gradle.kts is missing /$pattern/")
+        // Find all occurrences so duplicated maps (e.g. the buildscript pin map +
+        // the runtime configurations.all pin map) are detected when they drift apart.
+        // Filter to version-shaped captures so this script's own regex literals
+        // (which themselves contain the patterns) don't self-match.
+        fun extractFromBuild(pattern: String): String {
+            val matches =
+                Regex(pattern)
+                    .findAll(buildScriptText)
+                    .map { it.groupValues[1] }
+                    .filter { stableRe.matches(it) }
+                    .toList()
+            return when {
+                matches.isEmpty() -> error("build.gradle.kts is missing /$pattern/")
+                matches.distinct().size == 1 -> matches.first()
+                else -> matches.joinToString("/") // visual mismatch flag in the report
+            }
+        }
 
         var updates = 0
 
