@@ -503,6 +503,11 @@ tasks.register<JavaExec>("createSamplePdf") {
 }
 
 graalvmNative {
+    // Pull in upstream reachability metadata for popular libraries so we don't
+    // have to hand-maintain every reflect-config / proxy-config / resource-config.
+    metadataRepository {
+        enabled = true
+    }
     binaries {
         named("main") {
             mainClass = application.mainClass
@@ -514,6 +519,16 @@ graalvmNative {
             // Force AWT into headless mode at build time so PDFBox' Raster/ColorModel
             // <clinit> does not try to load X11-only graphics during the image build.
             buildArgs.add("-J-Djava.awt.headless=true")
+            // G1 GC for the generated image — faster build and better runtime GC
+            // for PDF batch workloads than the default SerialGC.
+            buildArgs.add("--gc=G1")
+            // Build a binary that runs on any x86-64 / arm64 baseline CPU; without
+            // this GraalVM 25 defaults to a higher microarch level and the binary
+            // can SIGILL on older hardware end-users may still have.
+            buildArgs.add("-march=compatibility")
+            // Logback / SLF4J are safe to initialize at build time and doing so
+            // both shrinks the image and trims startup latency.
+            buildArgs.add("--initialize-at-build-time=org.slf4j,ch.qos.logback")
             resources.includedPatterns.add(".*\\.xml")
             resources.includedPatterns.add(".*\\.properties")
         }
