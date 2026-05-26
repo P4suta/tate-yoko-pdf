@@ -24,7 +24,7 @@ plugins {
     jacoco
     `java-test-fixtures`
     id("com.gradleup.shadow") version "9.4.1"
-    id("org.graalvm.buildtools.native") version "1.1.0"
+    id("org.graalvm.buildtools.native") version "1.1.1"
     id("com.diffplug.spotless") version "8.5.1"
     id("net.ltgt.errorprone") version "5.1.0"
     id("com.github.ben-manes.versions") version "0.54.0"
@@ -71,12 +71,12 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.0")
     testImplementation("org.assertj:assertj-core:3.27.7")
     testImplementation("io.javalin:javalin-testtools:7.2.2")
-    testImplementation("org.mockito:mockito-core:5.14.2")
-    testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
+    testImplementation("org.mockito:mockito-core:5.23.0")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("nl.jqno.equalsverifier:equalsverifier:3.17.5")
-    testImplementation("org.awaitility:awaitility:4.2.2")
-    testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.7")
-    testImplementation("net.jqwik:jqwik:1.9.2")
+    testImplementation("org.awaitility:awaitility:4.3.0")
+    testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
+    testImplementation("net.jqwik:jqwik:1.10.0")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
