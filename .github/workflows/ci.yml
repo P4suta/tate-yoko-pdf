@@ -59,6 +59,35 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Native compile
         run: ./gradlew nativeCompile --no-daemon
+      - name: Generate sample PDF for smoke test
+        if: matrix.os == 'ubuntu-latest'
+        run: ./gradlew createSamplePdf --no-daemon
+      - name: Native binary smoke test (Web — startup + /health + upload accept)
+        # PDF rendering needs AWT native libs not yet bundled in the runtime image;
+        # tracked separately. Here we verify that the native binary starts, serves
+        # the health endpoints, and accepts a multipart upload (redirect to /progress).
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          TATE_YOKO_NO_BROWSER: "true"
+          TATE_YOKO_PORT: "8080"
+          TATE_YOKO_BIND: "127.0.0.1"
+        run: |
+          ./build/native/nativeCompile/tate-yoko-pdf &
+          PID=$!
+          trap "kill $PID 2>/dev/null || true" EXIT
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health/live > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/health/live | grep -F '"status":"UP"'
+          curl -fsS http://127.0.0.1:8080/health/ready | grep -F '"status":"UP"'
+          curl -fsS -o /dev/null -w "POST /jobs → HTTP %{http_code}\n" \
+            -F "pdf=@build/test-data/sample.pdf;type=application/pdf" \
+            http://127.0.0.1:8080/jobs
+          # Also verify the error path: invalid UUID renders error.jte and returns 404.
+          curl -sS -o /tmp/err.html -w "GET /jobs/bad/progress → HTTP %{http_code}\n" \
+            http://127.0.0.1:8080/jobs/bad/progress
+          grep -q JOB_NOT_FOUND /tmp/err.html
       - name: Upload native binary
         uses: actions/upload-artifact@v5
         with:

@@ -204,11 +204,76 @@ web/
 ## テスト
 
 ```bash
-just check    # 全テスト + 静的解析 + カバレッジ
+just check    # 全テスト + 静的解析 + カバレッジ (JaCoCo 層別 threshold)
 just test     # テストのみ
 ```
 
-ドメイン層は PDF非依存で純粋ユニットテスト、`SpreadServiceIntegrationTest` がプログラマティックPDFでE2E検証。JUnit 5 並列実行を有効化済み。
+テストは多層構成:
+- **Unit** (`domain.*`, `application`, `port.exception`, `observability`) — 純粋ロジック、外部依存なし
+- **Property-based** (`jqwik`) — Pagination / SpreadLayoutCalculator の不変条件を 1000 ケースで検証
+- **Integration** (`infrastructure.pdfbox`) — 実 PDFBox 経由で破損 / 暗号化 / 回転 PDF を扱う
+- **Component** (`web.routes`, `web.job`, `web.lifecycle`) — Javalin in-process (`JavalinTest`) + `WebTestHarness`
+- **CLI** (`cli`) — picocli `CommandLine#execute` を直接呼び stdout/stderr/exit code を assert
+
+JaCoCo は層別 threshold で `check` の必須ゲート: `domain.*` 95% / `application` 85% / `infrastructure.*` 75% / `web.routes` 50% / `web.job` 85% / `web.lifecycle` 70% / `observability` 80% / 全体 78%。
+
+---
+
+## トラブルシュート
+
+### エラーが出たら
+
+エラー画面 (Web) や `Error[KIND]: ...` (CLI) に出る **ErrorKind** で原因が判別できます。
+
+| ErrorKind | 意味 | 対処 |
+|---|---|---|
+| `UPLOAD_EMPTY` | PDF が添付されていない | 「PDFファイル」フィールドに `.pdf` を選択してアップロード |
+| `UPLOAD_INVALID` | 拡張子が `.pdf` でない / Content-Type が違う / 先頭 4 バイトが `%PDF` でない (= 偽 PDF) / ファイル名が長すぎる | 本物の PDF を選び直す |
+| `PDF_CORRUPTED` | PDF が破損している | ブラウザ等で開けるか確認、別ツールで再エクスポート |
+| `PDF_PASSWORD_PROTECTED` | パスワード保護されている | 保護を解除した PDF を渡す |
+| `PDF_TOO_LARGE` | アップロード上限 (500 MB) 超 | ページ削減 or 分割 |
+| `PDF_NOT_FOUND` | CLI で指定したファイルが存在しない | パスを確認 |
+| `PDF_INVALID_PAGE` | ページ数 ≤ 0 など不正なページ指定 | 入力 PDF を確認 |
+| `PDF_WRITE_FAILED` | 出力先に書き込めない | 書き込み権限 / 空き容量を確認 |
+| `JOB_NOT_FOUND` | ジョブ ID が見つからない | URL を確認、または最初からやり直す |
+| `JOB_EXPIRED` / `JOB_OUTPUT_GONE` | 保存期間 (1 時間) 切れ / 出力ファイルが削除済み | 最初からやり直す |
+| `INVALID_PARAMETER` | `direction` が `RTL`/`LTR` 以外、など | パラメータを確認 |
+| `OUT_OF_MEMORY` | JVM ヒープ不足 | `JAVA_TOOL_OPTIONS=-Xmx1g` でヒープを増やす |
+| `INTERNAL` | 上記以外の予期しないエラー | `traceId` をサポートに連絡 |
+
+### CLI exit code (sysexits.h 風)
+
+| code | 定数 | 意味 |
+|---:|---|---|
+| 0 | OK | 成功 |
+| 2 | USAGE | コマンドライン使い方エラー |
+| 65 | INPUT_DATA | PDF が破損 / 不正 |
+| 66 | INPUT_NOTFOUND | 入力ファイルが存在しない |
+| 70 | INTERNAL | 予期しないエラー |
+| 73 | OUTPUT_WRITE | 出力に書き込めない |
+| 74 | IO_ERROR | I/O エラー |
+| 77 | PASSWORD | パスワード保護 PDF |
+| 78 | CONFIG | 設定/パラメータエラー |
+| 137 | OOM | OutOfMemory (= 128 + SIGKILL) |
+
+シェルから連結する例: `tate-yoko-pdf in.pdf -o out.pdf || echo "failed: exit=$?"`。
+
+### 詳細ログ
+
+- **CLI**: `-v` / `--verbose` で DEBUG ログ + stack trace + technicalDetail
+- **Web (console)**: stdout に `[traceId=...] [jobId=...] [LEVEL] ...` 形式
+- **Web (JSON)**: 環境変数 `TATE_YOKO_LOG_FORMAT=json` で起動すると JSON 1 行/イベントに切り替え (Docker/Kubernetes でログ集約する場合に便利)
+- **traceId**: HTTP レスポンスの `X-Trace-Id` ヘッダ、エラー画面の下部、WS フレーム (`"traceId":"..."`) すべて同じ 32 文字 hex ID。サポートに連絡する際はこの ID を伝える
+
+### ヘルスチェック
+
+| エンドポイント | 用途 | 200 / 503 の意味 |
+|---|---|---|
+| `GET /health/live` | プロセス生存確認 (liveness) | 200=alive、503=shutdown 中 |
+| `GET /health/ready` | 依存検査 (readiness) | 200=workDir 書込可 / disk > 100MB / executor 健全、503=どれか DOWN または shutdown 中 |
+| `GET /health` | 後方互換 (= `/health/ready`) | 同上 |
+
+disk threshold は env `TATE_YOKO_HEALTH_MIN_FREE_MB` で上書き可能 (デフォルト 100MB)。
 
 ---
 
