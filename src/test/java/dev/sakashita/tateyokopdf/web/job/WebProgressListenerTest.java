@@ -2,6 +2,8 @@ package dev.sakashita.tateyokopdf.web.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
@@ -12,7 +14,13 @@ final class WebProgressListenerTest {
 
   private static Job sampleJob() {
     return new Job(
-        UUID.randomUUID(), Path.of("/w"), Path.of("/in"), Path.of("/out"), "x.pdf", Instant.now());
+        UUID.randomUUID(),
+        Path.of("/w"),
+        Path.of("/in"),
+        Path.of("/out"),
+        "x.pdf",
+        Instant.now(),
+        "trace-001");
   }
 
   @Test
@@ -28,7 +36,10 @@ final class WebProgressListenerTest {
     l.onStart(2);
     l.onSpreadComplete(1, 2);
     BlockingQueue<ProgressEvent> q = l.subscribe();
-    assertThat(q).containsExactly(new ProgressEvent.Started(2), new ProgressEvent.Progress(1, 2));
+    assertThat(q)
+        .containsExactly(
+            new ProgressEvent.Started(2, "trace-001"),
+            new ProgressEvent.Progress(1, 2, "trace-001"));
   }
 
   @Test
@@ -42,25 +53,37 @@ final class WebProgressListenerTest {
   }
 
   @Test
-  void failedTriggersTerminalAndJobStatusFailed() {
+  void failWithSpreadExceptionPropagatesKindAndMessage() {
     Job job = sampleJob();
     var l = new WebProgressListener(job);
-    l.fail("kaboom");
+    l.fail(SpreadException.of(ErrorKind.PDF_CORRUPTED));
     assertThat(job.status()).isInstanceOf(JobStatus.Failed.class);
-    JobStatus.Failed f = (JobStatus.Failed) job.status();
-    assertThat(f.message()).isEqualTo("kaboom");
+    BlockingQueue<ProgressEvent> q = l.subscribe();
+    ProgressEvent ev = q.poll();
+    assertThat(ev).isInstanceOf(ProgressEvent.Failed.class);
+    ProgressEvent.Failed f = (ProgressEvent.Failed) ev;
+    assertThat(f.errorKind()).isEqualTo(ErrorKind.PDF_CORRUPTED);
+    assertThat(f.traceId()).isEqualTo("trace-001");
+  }
+
+  @Test
+  void failWithStringMapsToInternalKind() {
+    Job job = sampleJob();
+    var l = new WebProgressListener(job);
+    l.fail("plain message");
+    BlockingQueue<ProgressEvent> q = l.subscribe();
+    ProgressEvent.Failed f = (ProgressEvent.Failed) q.poll();
+    assertThat(f.errorKind()).isEqualTo(ErrorKind.INTERNAL);
+    assertThat(f.message()).isEqualTo("plain message");
   }
 
   @Test
   void subscribeAfterTerminalDoesNotEnqueueFutureEvents() {
     Job job = sampleJob();
     var l = new WebProgressListener(job);
-    l.fail("done");
+    l.fail(SpreadException.of(ErrorKind.PDF_CORRUPTED));
     BlockingQueue<ProgressEvent> q = l.subscribe();
-    // history backfilled
     assertThat(q).hasSize(1);
-    // further publishes (if any) won't reach this subscriber because subscribers list rejected it
-    // (note: there are no public methods to publish after terminal, so this asserts only history)
     assertThat(q.poll()).isInstanceOf(ProgressEvent.Failed.class);
   }
 

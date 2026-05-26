@@ -11,6 +11,7 @@ import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
+import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
@@ -62,13 +63,19 @@ public final class WebLauncher {
             });
 
     PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers);
+    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
     WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
 
-    IdleShutdown idle = new IdleShutdown(IDLE_TIMEOUT, IDLE_CHECK_INTERVAL, () -> System.exit(0));
+    IdleShutdown idle =
+        new IdleShutdown(
+            IDLE_TIMEOUT,
+            IDLE_CHECK_INTERVAL,
+            () -> System.exit(0),
+            java.time.Instant::now,
+            registry::hasRunningJobs);
     idle.start();
 
     Javalin app = buildJavalin(pages, jobs, idle, exHandler, MAX_UPLOAD_BYTES).start(bind, port);

@@ -8,6 +8,8 @@ import dev.sakashita.tateyokopdf.domain.strategy.CoverSinglePagination;
 import dev.sakashita.tateyokopdf.domain.strategy.PaginationStrategy;
 import dev.sakashita.tateyokopdf.domain.strategy.StandardPagination;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
+import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
+import dev.sakashita.tateyokopdf.observability.SafeExecutor;
 import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
@@ -15,6 +17,9 @@ import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.job.JobStatus;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
+import dev.sakashita.tateyokopdf.web.job.WsCloseCodes;
+import dev.sakashita.tateyokopdf.web.job.WsFrames;
+import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.http.Context;
 import io.javalin.http.UploadedFile;
 import io.javalin.websocket.WsConnectContext;
@@ -38,29 +43,32 @@ import org.slf4j.LoggerFactory;
 public final class JobController {
 
   private static final Logger log = LoggerFactory.getLogger(JobController.class);
+  private static final long WS_POLL_SECONDS = 1L;
 
   private final JobRegistry registry;
   private final ViewRenderer renderer;
   private final ExecutorService executor;
+  private final UploadValidator uploadValidator;
 
-  public JobController(JobRegistry registry, ViewRenderer renderer, ExecutorService executor) {
+  public JobController(
+      JobRegistry registry,
+      ViewRenderer renderer,
+      ExecutorService executor,
+      UploadValidator uploadValidator) {
     this.registry = registry;
     this.renderer = renderer;
     this.executor = executor;
+    this.uploadValidator = uploadValidator;
   }
 
   public void submit(Context ctx) {
     UploadedFile uploaded = ctx.uploadedFile("pdf");
-    if (uploaded == null || uploaded.size() == 0) {
-      throw SpreadException.of(ErrorKind.UPLOAD_EMPTY);
-    }
+    String originalName = uploadValidator.validate(uploaded);
 
     String dirParam = ctx.formParamAsClass("direction", String.class).getOrDefault("RTL");
     ReadingDirection direction = parseDirection(dirParam);
     boolean coverSingle = ctx.formParam("coverSingle") != null;
-
-    String filename = uploaded.filename();
-    String originalName = (filename != null && !filename.isBlank()) ? filename : "input.pdf";
+    String traceId = traceIdOf(ctx);
 
     Path workDir;
     Path inputPath;
@@ -77,7 +85,7 @@ public final class JobController {
       throw SpreadException.withDetail(ErrorKind.INTERNAL, "stage upload failed", e);
     }
 
-    Job job = registry.register(workDir, inputPath, outputPath, originalName);
+    Job job = registry.register(workDir, inputPath, outputPath, originalName, traceId);
     WebProgressListener listener =
         registry
             .listener(job.id())
@@ -92,18 +100,8 @@ public final class JobController {
 
     var ignored =
         executor.submit(
-            () -> {
-              try {
-                service.execute(options);
-              } catch (SpreadException e) {
-                log.warn(
-                    "Spread failed [{}] for {}: {}", e.kind(), originalName, e.userMessage(), e);
-                listener.fail(e.userMessage());
-              } catch (RuntimeException e) {
-                log.error("Unexpected error during spread for {}", originalName, e);
-                listener.fail(ErrorKind.INTERNAL.defaultUserMessage());
-              }
-            });
+            SafeExecutor.guarded(
+                () -> service.execute(options), listener::fail, "job=" + job.id()));
 
     ctx.redirect("/jobs/" + job.id() + "/progress");
   }
@@ -127,42 +125,56 @@ public final class JobController {
     try {
       id = UUID.fromString(ctx.pathParam("id"));
     } catch (IllegalArgumentException e) {
-      ctx.closeSession(1008, "Job not found");
+      ctx.send(WsFrames.error(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
+      ctx.closeSession(WsCloseCodes.JOB_NOT_FOUND, "Job not found");
       return;
     }
     WebProgressListener listener = registry.listener(id).orElse(null);
     if (listener == null) {
-      ctx.closeSession(1008, "Job not found");
+      ctx.send(WsFrames.error(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
+      ctx.closeSession(WsCloseCodes.JOB_NOT_FOUND, "Job not found");
       return;
     }
     BlockingQueue<ProgressEvent> queue = listener.subscribe();
-    Thread pump =
-        new Thread(
-            () -> {
-              try {
-                while (ctx.session.isOpen()) {
-                  ProgressEvent event = queue.poll(15, TimeUnit.SECONDS);
-                  if (event == null) {
-                    continue;
-                  }
-                  ctx.send(toJson(event));
-                  if (event instanceof ProgressEvent.Completed
-                      || event instanceof ProgressEvent.Failed) {
-                    ctx.closeSession(1000, "done");
-                    break;
-                  }
-                }
-              } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-              } catch (RuntimeException e) {
-                log.debug("WS pump aborted: {}", e.getMessage());
-              } finally {
-                listener.unsubscribe(queue);
-              }
-            },
-            "ws-progress-" + id);
+    Thread pump = new Thread(() -> pump(ctx, listener, queue, id), "ws-progress-" + id);
     pump.setDaemon(true);
     pump.start();
+  }
+
+  private static void pump(
+      WsConnectContext ctx,
+      WebProgressListener listener,
+      BlockingQueue<ProgressEvent> queue,
+      UUID id) {
+    try {
+      while (ctx.session.isOpen()) {
+        ProgressEvent event = queue.poll(WS_POLL_SECONDS, TimeUnit.SECONDS);
+        if (event == null) {
+          continue;
+        }
+        ctx.send(WsFrames.progress(event));
+        if (event instanceof ProgressEvent.Completed) {
+          ctx.closeSession(WsCloseCodes.NORMAL, "done");
+          break;
+        }
+        if (event instanceof ProgressEvent.Failed f) {
+          ctx.closeSession(WsCloseCodes.forErrorKind(f.errorKind()), f.errorKind().name());
+          break;
+        }
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+    } catch (RuntimeException e) {
+      log.debug("WS pump for {} aborted: {}", id, e.getMessage());
+      try {
+        ctx.send(WsFrames.error(ErrorKind.INTERNAL, "WS 内部エラー", "-"));
+        ctx.closeSession(WsCloseCodes.INTERNAL, "internal");
+      } catch (RuntimeException ignored) {
+        // best-effort
+      }
+    } finally {
+      listener.unsubscribe(queue);
+    }
   }
 
   public void download(Context ctx) {
@@ -224,19 +236,9 @@ public final class JobController {
     }
   }
 
-  private static String toJson(ProgressEvent event) {
-    return switch (event) {
-      case ProgressEvent.Started s -> "{\"type\":\"started\",\"total\":" + s.total() + "}";
-      case ProgressEvent.Progress p ->
-          "{\"type\":\"progress\",\"current\":" + p.current() + ",\"total\":" + p.total() + "}";
-      case ProgressEvent.Completed c -> "{\"type\":\"completed\"}";
-      case ProgressEvent.Failed f ->
-          "{\"type\":\"failed\",\"message\":\"" + jsonEscape(f.message()) + "\"}";
-    };
-  }
-
-  private static String jsonEscape(String s) {
-    return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+  private static String traceIdOf(Context ctx) {
+    String t = ctx.attribute(RequestTracingFilter.ATTR_TRACE_ID);
+    return t != null ? t : "-";
   }
 
   private static String downloadName(String originalName) {

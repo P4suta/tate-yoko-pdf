@@ -8,6 +8,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -26,13 +27,14 @@ public final class IdleShutdown {
   private final Duration checkInterval;
   private final Runnable shutdownAction;
   private final Supplier<Instant> nowSupplier;
+  private final BooleanSupplier busySupplier;
   private final ScheduledExecutorService scheduler;
   private final AtomicInteger active = new AtomicInteger(0);
   private final AtomicReference<Instant> lastDisconnect;
   private @Nullable ScheduledFuture<?> task;
 
   public IdleShutdown(Duration idleTimeout, Duration checkInterval, Runnable shutdownAction) {
-    this(idleTimeout, checkInterval, shutdownAction, Instant::now);
+    this(idleTimeout, checkInterval, shutdownAction, Instant::now, () -> false);
   }
 
   public IdleShutdown(
@@ -40,10 +42,20 @@ public final class IdleShutdown {
       Duration checkInterval,
       Runnable shutdownAction,
       Supplier<Instant> nowSupplier) {
+    this(idleTimeout, checkInterval, shutdownAction, nowSupplier, () -> false);
+  }
+
+  public IdleShutdown(
+      Duration idleTimeout,
+      Duration checkInterval,
+      Runnable shutdownAction,
+      Supplier<Instant> nowSupplier,
+      BooleanSupplier busySupplier) {
     this.idleTimeout = idleTimeout;
     this.checkInterval = checkInterval;
     this.shutdownAction = shutdownAction;
     this.nowSupplier = nowSupplier;
+    this.busySupplier = busySupplier;
     this.lastDisconnect = new AtomicReference<>(nowSupplier.get());
     this.scheduler =
         Executors.newSingleThreadScheduledExecutor(
@@ -81,6 +93,9 @@ public final class IdleShutdown {
   private void check() {
     try {
       if (active.get() > 0) {
+        return;
+      }
+      if (busySupplier.getAsBoolean()) {
         return;
       }
       Duration sinceLast = Duration.between(lastDisconnect.get(), nowSupplier.get());
