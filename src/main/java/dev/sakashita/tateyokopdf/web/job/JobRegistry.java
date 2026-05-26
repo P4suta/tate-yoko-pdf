@@ -62,6 +62,10 @@ public final class JobRegistry {
     return all;
   }
 
+  public int size() {
+    return jobs.size();
+  }
+
   public boolean hasRunningJobs() {
     for (Job job : jobs.values()) {
       JobStatus status = job.status();

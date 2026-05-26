@@ -33,6 +33,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -64,6 +65,8 @@ public final class JobController {
   public void submit(Context ctx) {
     UploadedFile uploaded = ctx.uploadedFile("pdf");
     String originalName = uploadValidator.validate(uploaded);
+    // validate() throws when uploaded is null, so reaching here narrows it for NullAway.
+    UploadedFile pdf = Objects.requireNonNull(uploaded, "uploaded");
 
     String dirParam = ctx.formParamAsClass("direction", String.class).getOrDefault("RTL");
     ReadingDirection direction = parseDirection(dirParam);
@@ -76,7 +79,7 @@ public final class JobController {
     try {
       workDir = Files.createTempDirectory("tate-yoko-job-");
       inputPath = workDir.resolve("input.pdf");
-      try (var in = uploaded.content()) {
+      try (var in = pdf.content()) {
         Files.copy(in, inputPath, StandardCopyOption.REPLACE_EXISTING);
       }
       String outputName = originalName.replaceFirst("(?i)\\.pdf$", "") + "_spread.pdf";
