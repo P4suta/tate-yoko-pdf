@@ -1,0 +1,4 @@
+[tools]
+lefthook = "latest"
+typos = "latest"
+just = "latest"

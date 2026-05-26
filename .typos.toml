@@ -1,0 +1,16 @@
+[default.extend-words]
+# プロジェクト固有の語（typo に見えるが正しい）
+sakashita = "sakashita"
+yoko = "yoko"
+tate = "tate"
+# 技術設計書のシーケンス図で Strategy の短縮名として使っている
+strat = "strat"
+
+[files]
+extend-exclude = [
+    "build/",
+    "*.pdf",
+    "gradle/wrapper/",
+    "**/*.lock",
+    ".gradle/",
+]
