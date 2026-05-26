@@ -6,10 +6,10 @@ import java.util.List;
 
 public interface SpreadDocument extends AutoCloseable {
 
-    void addSpread(SpreadSpec spec, List<PagePlacement> placements);
+  void addSpread(SpreadSpec spec, List<PagePlacement> placements);
 
-    void save(Path destination);
+  void save(Path destination);
 
-    @Override
-    void close();
+  @Override
+  void close();
 }

@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (JVM)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          cache: 'gradle'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Gradle check (test + spotless + errorprone + nullaway + jacoco)
+        run: ./gradlew check --no-daemon
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v5
+        with:
+          name: test-reports
+          path: |
+            build/reports/tests/test
+            build/reports/jacoco/test/html
+          if-no-files-found: ignore
+
+  native:
+    name: native-image (${{ matrix.os }})
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: graalvm/setup-graalvm@v1
+        with:
+          java-version: '25'
+          distribution: 'graalvm-community'
+          cache: 'gradle'
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Native compile
+        run: ./gradlew nativeCompile --no-daemon
+      - name: Upload native binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: tate-yoko-pdf-${{ matrix.os }}
+          path: |
+            build/native/nativeCompile/tate-yoko-pdf*
+            build/native/nativeCompile/*.so
+            build/native/nativeCompile/*.dll
+            build/native/nativeCompile/*.dylib
+          if-no-files-found: ignore

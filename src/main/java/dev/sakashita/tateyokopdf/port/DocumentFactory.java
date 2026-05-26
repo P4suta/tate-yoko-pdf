@@ -4,7 +4,7 @@ import java.nio.file.Path;
 
 public interface DocumentFactory {
 
-    SourceDocument openSource(Path path);
+  SourceDocument openSource(Path path);
 
-    SpreadDocument createOutput();
+  SpreadDocument createOutput();
 }

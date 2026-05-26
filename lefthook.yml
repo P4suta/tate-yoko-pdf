@@ -1,0 +1,12 @@
+pre-commit:
+  parallel: true
+  commands:
+    spotless-apply:
+      glob: "*.{java,kt,kts}"
+      run: docker compose run --rm -T dev ./gradlew spotlessApply --quiet
+      stage_fixed: true
+
+pre-push:
+  commands:
+    check:
+      run: docker compose run --rm -T dev ./gradlew check --quiet
