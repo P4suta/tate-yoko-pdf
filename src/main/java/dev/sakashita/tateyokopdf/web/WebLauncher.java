@@ -12,6 +12,9 @@ import java.net.ServerSocket;
 import java.net.URI;
 import java.time.Duration;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,6 +25,7 @@ public final class WebLauncher {
   private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
   private static final Duration JOB_TTL = Duration.ofHours(1);
   private static final Duration GC_SWEEP_INTERVAL = Duration.ofMinutes(1);
+  private static final int WORKER_POOL_SIZE = 2;
 
   public void run() {
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
@@ -29,8 +33,16 @@ public final class WebLauncher {
 
     TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
     JobRegistry registry = new JobRegistry();
+    ExecutorService workers =
+        Executors.newFixedThreadPool(
+            WORKER_POOL_SIZE,
+            r -> {
+              Thread t = new Thread(r, "tate-yoko-worker");
+              t.setDaemon(true);
+              return t;
+            });
     PageController pages = new PageController(engine);
-    JobController jobs = new JobController(registry, engine);
+    JobController jobs = new JobController(registry, engine, workers);
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
@@ -43,8 +55,10 @@ public final class WebLauncher {
                   config.routes.get("/health", ctx -> ctx.result("OK"));
                   config.routes.get("/", pages::index);
                   config.routes.post("/jobs", jobs::submit);
+                  config.routes.get("/jobs/{id}/progress", jobs::showProgress);
                   config.routes.get("/jobs/{id}/result", jobs::showResult);
                   config.routes.get("/jobs/{id}/download", jobs::download);
+                  config.routes.ws("/jobs/{id}/ws", ws -> ws.onConnect(jobs::onProgressWs));
                 })
             .start(bind, port);
     int actualPort = app.port();
@@ -63,6 +77,12 @@ public final class WebLauncher {
                     app.stop();
                   } finally {
                     gc.stop();
+                    workers.shutdownNow();
+                    try {
+                      workers.awaitTermination(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                      Thread.currentThread().interrupt();
+                    }
                     registry.drainAll().forEach(job -> WorkDirs.deleteQuietly(job.workDir()));
                     shutdown.countDown();
                   }

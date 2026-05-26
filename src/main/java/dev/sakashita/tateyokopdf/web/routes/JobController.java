@@ -11,13 +11,15 @@ import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
-import dev.sakashita.tateyokopdf.web.job.NoOpProgressListener;
-import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
+import dev.sakashita.tateyokopdf.web.job.JobStatus;
+import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
+import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
 import gg.jte.TemplateEngine;
 import gg.jte.output.StringOutput;
 import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.UploadedFile;
+import io.javalin.websocket.WsConnectContext;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +32,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,10 +44,12 @@ public final class JobController {
 
   private final JobRegistry registry;
   private final TemplateEngine engine;
+  private final ExecutorService executor;
 
-  public JobController(JobRegistry registry, TemplateEngine engine) {
+  public JobController(JobRegistry registry, TemplateEngine engine, ExecutorService executor) {
     this.registry = registry;
     this.engine = engine;
+    this.executor = executor;
   }
 
   public void submit(Context ctx) {
@@ -83,48 +90,55 @@ public final class JobController {
       return;
     }
 
+    Job job = registry.register(workDir, inputPath, outputPath, originalName);
+    WebProgressListener listener =
+        registry
+            .listener(job.id())
+            .orElseThrow(() -> new IllegalStateException("listener missing after register"));
+
     SpreadOptions options = new SpreadOptions(inputPath, outputPath, direction, coverSingle);
     PaginationStrategy strategy =
         coverSingle ? new CoverSinglePagination() : new StandardPagination();
-    var service =
+    SpreadService service =
         new SpreadService(
-            new PdfBoxDocumentFactory(),
-            new SpreadLayoutCalculator(),
-            strategy,
-            new NoOpProgressListener());
+            new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), strategy, listener);
 
-    try {
-      service.execute(options);
-    } catch (SpreadException e) {
-      log.warn("Spread failed for {}: {}", originalName, e.getMessage());
-      WorkDirs.deleteQuietly(workDir);
-      renderError(ctx, Objects.requireNonNullElse(e.getMessage(), "原因不明のエラー"));
-      return;
-    } catch (RuntimeException e) {
-      log.error("Unexpected error during spread for {}", originalName, e);
-      WorkDirs.deleteQuietly(workDir);
-      renderError(
-          ctx,
-          "予期しないエラーが発生しました: "
-              + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName()));
+    var ignored =
+        executor.submit(
+            () -> {
+              try {
+                service.execute(options);
+              } catch (SpreadException e) {
+                log.warn("Spread failed for {}: {}", originalName, e.getMessage());
+                listener.fail(Objects.requireNonNullElse(e.getMessage(), "原因不明のエラー"));
+              } catch (RuntimeException e) {
+                log.error("Unexpected error during spread for {}", originalName, e);
+                listener.fail(
+                    "予期しないエラーが発生しました: "
+                        + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName()));
+              }
+            });
+
+    ctx.redirect("/jobs/" + job.id() + "/progress");
+  }
+
+  public void showProgress(Context ctx) {
+    Job job = lookupOrError(ctx);
+    if (job == null) {
       return;
     }
-
-    Job job = registry.register(workDir, inputPath, outputPath, originalName);
-    ctx.redirect("/jobs/" + job.id() + "/result");
+    var out = new StringOutput();
+    engine.render("progress.jte", Map.of("job", job), out);
+    ctx.html(out.toString());
   }
 
   public void showResult(Context ctx) {
-    UUID id;
-    try {
-      id = UUID.fromString(ctx.pathParam("id"));
-    } catch (IllegalArgumentException e) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+    Job job = lookupOrError(ctx);
+    if (job == null) {
       return;
     }
-    Job job = registry.find(id).orElse(null);
-    if (job == null) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+    if (!(job.status() instanceof JobStatus.Completed)) {
+      ctx.redirect("/jobs/" + job.id() + "/progress");
       return;
     }
     var out = new StringOutput();
@@ -132,17 +146,52 @@ public final class JobController {
     ctx.html(out.toString());
   }
 
-  public void download(Context ctx) {
+  public void onProgressWs(WsConnectContext ctx) {
     UUID id;
     try {
       id = UUID.fromString(ctx.pathParam("id"));
     } catch (IllegalArgumentException e) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+      ctx.closeSession(1008, "Job not found");
       return;
     }
-    Job job = registry.find(id).orElse(null);
+    WebProgressListener listener = registry.listener(id).orElse(null);
+    if (listener == null) {
+      ctx.closeSession(1008, "Job not found");
+      return;
+    }
+    BlockingQueue<ProgressEvent> queue = listener.subscribe();
+    Thread pump =
+        new Thread(
+            () -> {
+              try {
+                while (ctx.session.isOpen()) {
+                  ProgressEvent event = queue.poll(15, TimeUnit.SECONDS);
+                  if (event == null) {
+                    continue;
+                  }
+                  ctx.send(toJson(event));
+                  if (event instanceof ProgressEvent.Completed
+                      || event instanceof ProgressEvent.Failed) {
+                    ctx.closeSession(1000, "done");
+                    break;
+                  }
+                }
+              } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+              } catch (RuntimeException e) {
+                log.debug("WS pump aborted: {}", e.getMessage());
+              } finally {
+                listener.unsubscribe(queue);
+              }
+            },
+            "ws-progress-" + id);
+    pump.setDaemon(true);
+    pump.start();
+  }
+
+  public void download(Context ctx) {
+    Job job = lookupOrError(ctx);
     if (job == null) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
       return;
     }
     Path output = job.outputPath();
@@ -157,11 +206,13 @@ public final class JobController {
       size = Files.size(output);
       raw = Files.newInputStream(output);
     } catch (IOException e) {
-      log.error("Failed to open output for job {}", id, e);
+      log.error("Failed to open output for job {}", job.id(), e);
       ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Failed to read output");
       return;
     }
 
+    UUID id = job.id();
+    Path workDir = job.workDir();
     InputStream stream =
         new FilterInputStream(raw) {
           @Override
@@ -170,7 +221,7 @@ public final class JobController {
               super.close();
             } finally {
               registry.remove(id);
-              WorkDirs.deleteQuietly(job.workDir());
+              dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs.deleteQuietly(workDir);
               log.debug("Cleaned up job {} after download", id);
             }
           }
@@ -184,6 +235,37 @@ public final class JobController {
     ctx.result(stream);
   }
 
+  private @org.jspecify.annotations.Nullable Job lookupOrError(Context ctx) {
+    UUID id;
+    try {
+      id = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+      return null;
+    }
+    Job job = registry.find(id).orElse(null);
+    if (job == null) {
+      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+      return null;
+    }
+    return job;
+  }
+
+  private static String toJson(ProgressEvent event) {
+    return switch (event) {
+      case ProgressEvent.Started s -> "{\"type\":\"started\",\"total\":" + s.total() + "}";
+      case ProgressEvent.Progress p ->
+          "{\"type\":\"progress\",\"current\":" + p.current() + ",\"total\":" + p.total() + "}";
+      case ProgressEvent.Completed c -> "{\"type\":\"completed\"}";
+      case ProgressEvent.Failed f ->
+          "{\"type\":\"failed\",\"message\":\"" + jsonEscape(f.message()) + "\"}";
+    };
+  }
+
+  private static String jsonEscape(String s) {
+    return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
+  }
+
   private static String downloadName(String originalName) {
     String base = originalName.replaceFirst("(?i)\\.pdf$", "");
     return base + "_spread.pdf";
@@ -191,11 +273,5 @@ public final class JobController {
 
   private static String urlEncode(String s) {
     return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
-  }
-
-  private void renderError(Context ctx, String message) {
-    var out = new StringOutput();
-    engine.render("error.jte", Map.of("message", message), out);
-    ctx.status(HttpStatus.UNPROCESSABLE_CONTENT).html(out.toString());
   }
 }
