@@ -3,8 +3,8 @@ package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 import dev.sakashita.tateyokopdf.port.DocumentFactory;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
-import dev.sakashita.tateyokopdf.port.exception.DocumentReadException;
-import dev.sakashita.tateyokopdf.port.exception.PasswordProtectedException;
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import java.io.IOException;
 import java.nio.file.Path;
 import org.apache.pdfbox.Loader;
@@ -18,15 +18,14 @@ public class PdfBoxDocumentFactory implements DocumentFactory {
 
   @Override
   public SourceDocument openSource(Path path) {
-    log.info("Opening source PDF: {}", path);
+    log.info("Opening source PDF: {}", path.getFileName());
     try {
       var doc = Loader.loadPDF(path.toFile());
       return new PdfBoxSourceDocument(doc);
     } catch (InvalidPasswordException e) {
-      throw new PasswordProtectedException(
-          "The PDF is password-protected and cannot be processed: " + path, e);
+      throw SpreadException.withDetail(ErrorKind.PDF_PASSWORD_PROTECTED, "path=" + path, e);
     } catch (IOException e) {
-      throw new DocumentReadException("Failed to open PDF: " + path, e);
+      throw SpreadException.withDetail(ErrorKind.PDF_CORRUPTED, "path=" + path, e);
     }
   }
 

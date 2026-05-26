@@ -1,6 +1,8 @@
 package dev.sakashita.tateyokopdf.domain.strategy;
 
 import dev.sakashita.tateyokopdf.domain.model.PagePairSpec;
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.Validators;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -8,9 +10,7 @@ public final class CoverSinglePagination implements PaginationStrategy {
 
   @Override
   public List<PagePairSpec> paginate(int totalPages) {
-    if (totalPages <= 0) {
-      throw new IllegalArgumentException("totalPages must be positive: " + totalPages);
-    }
+    Validators.require(totalPages > 0, ErrorKind.PDF_INVALID_PAGE, "totalPages=" + totalPages);
 
     List<PagePairSpec> result = new ArrayList<>();
 

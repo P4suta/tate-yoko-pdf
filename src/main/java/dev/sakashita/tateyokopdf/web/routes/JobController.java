@@ -8,16 +8,14 @@ import dev.sakashita.tateyokopdf.domain.strategy.CoverSinglePagination;
 import dev.sakashita.tateyokopdf.domain.strategy.PaginationStrategy;
 import dev.sakashita.tateyokopdf.domain.strategy.StandardPagination;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.job.JobStatus;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
-import gg.jte.TemplateEngine;
-import gg.jte.output.StringOutput;
 import io.javalin.http.Context;
-import io.javalin.http.HttpStatus;
 import io.javalin.http.UploadedFile;
 import io.javalin.websocket.WsConnectContext;
 import java.io.FilterInputStream;
@@ -30,7 +28,6 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -43,39 +40,31 @@ public final class JobController {
   private static final Logger log = LoggerFactory.getLogger(JobController.class);
 
   private final JobRegistry registry;
-  private final TemplateEngine engine;
+  private final ViewRenderer renderer;
   private final ExecutorService executor;
 
-  public JobController(JobRegistry registry, TemplateEngine engine, ExecutorService executor) {
+  public JobController(JobRegistry registry, ViewRenderer renderer, ExecutorService executor) {
     this.registry = registry;
-    this.engine = engine;
+    this.renderer = renderer;
     this.executor = executor;
   }
 
   public void submit(Context ctx) {
     UploadedFile uploaded = ctx.uploadedFile("pdf");
     if (uploaded == null || uploaded.size() == 0) {
-      ctx.status(HttpStatus.BAD_REQUEST).result("pdf file is required");
-      return;
+      throw SpreadException.of(ErrorKind.UPLOAD_EMPTY);
     }
 
     String dirParam = ctx.formParamAsClass("direction", String.class).getOrDefault("RTL");
-    ReadingDirection direction;
-    try {
-      direction = ReadingDirection.valueOf(dirParam.toUpperCase(Locale.ROOT));
-    } catch (IllegalArgumentException e) {
-      ctx.status(HttpStatus.BAD_REQUEST).result("direction must be RTL or LTR");
-      return;
-    }
+    ReadingDirection direction = parseDirection(dirParam);
     boolean coverSingle = ctx.formParam("coverSingle") != null;
+
+    String filename = uploaded.filename();
+    String originalName = (filename != null && !filename.isBlank()) ? filename : "input.pdf";
 
     Path workDir;
     Path inputPath;
     Path outputPath;
-    String originalName =
-        (uploaded.filename() != null && !uploaded.filename().isBlank())
-            ? uploaded.filename()
-            : "input.pdf";
     try {
       workDir = Files.createTempDirectory("tate-yoko-job-");
       inputPath = workDir.resolve("input.pdf");
@@ -85,9 +74,7 @@ public final class JobController {
       String outputName = originalName.replaceFirst("(?i)\\.pdf$", "") + "_spread.pdf";
       outputPath = workDir.resolve(outputName);
     } catch (IOException e) {
-      log.error("Failed to stage upload", e);
-      ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Failed to stage upload");
-      return;
+      throw SpreadException.withDetail(ErrorKind.INTERNAL, "stage upload failed", e);
     }
 
     Job job = registry.register(workDir, inputPath, outputPath, originalName);
@@ -109,13 +96,12 @@ public final class JobController {
               try {
                 service.execute(options);
               } catch (SpreadException e) {
-                log.warn("Spread failed for {}: {}", originalName, e.getMessage());
-                listener.fail(Objects.requireNonNullElse(e.getMessage(), "原因不明のエラー"));
+                log.warn(
+                    "Spread failed [{}] for {}: {}", e.kind(), originalName, e.userMessage(), e);
+                listener.fail(e.userMessage());
               } catch (RuntimeException e) {
                 log.error("Unexpected error during spread for {}", originalName, e);
-                listener.fail(
-                    "予期しないエラーが発生しました: "
-                        + Objects.requireNonNullElse(e.getMessage(), e.getClass().getSimpleName()));
+                listener.fail(ErrorKind.INTERNAL.defaultUserMessage());
               }
             });
 
@@ -123,27 +109,17 @@ public final class JobController {
   }
 
   public void showProgress(Context ctx) {
-    Job job = lookupOrError(ctx);
-    if (job == null) {
-      return;
-    }
-    var out = new StringOutput();
-    engine.render("progress.jte", Map.of("job", job), out);
-    ctx.html(out.toString());
+    Job job = lookup(ctx);
+    renderer.renderHtml(ctx, "progress.jte", Map.of("job", job));
   }
 
   public void showResult(Context ctx) {
-    Job job = lookupOrError(ctx);
-    if (job == null) {
-      return;
-    }
+    Job job = lookup(ctx);
     if (!(job.status() instanceof JobStatus.Completed)) {
       ctx.redirect("/jobs/" + job.id() + "/progress");
       return;
     }
-    var out = new StringOutput();
-    engine.render("result.jte", Map.of("job", job), out);
-    ctx.html(out.toString());
+    renderer.renderHtml(ctx, "result.jte", Map.of("job", job));
   }
 
   public void onProgressWs(WsConnectContext ctx) {
@@ -190,14 +166,10 @@ public final class JobController {
   }
 
   public void download(Context ctx) {
-    Job job = lookupOrError(ctx);
-    if (job == null) {
-      return;
-    }
+    Job job = lookup(ctx);
     Path output = job.outputPath();
     if (!Files.isRegularFile(output)) {
-      ctx.status(HttpStatus.GONE).result("Output file no longer available");
-      return;
+      throw SpreadException.of(ErrorKind.JOB_OUTPUT_GONE);
     }
 
     long size;
@@ -206,9 +178,7 @@ public final class JobController {
       size = Files.size(output);
       raw = Files.newInputStream(output);
     } catch (IOException e) {
-      log.error("Failed to open output for job {}", job.id(), e);
-      ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Failed to read output");
-      return;
+      throw SpreadException.withDetail(ErrorKind.INTERNAL, "read output failed", e);
     }
 
     UUID id = job.id();
@@ -235,20 +205,23 @@ public final class JobController {
     ctx.result(stream);
   }
 
-  private @org.jspecify.annotations.Nullable Job lookupOrError(Context ctx) {
+  private Job lookup(Context ctx) {
     UUID id;
     try {
       id = UUID.fromString(ctx.pathParam("id"));
     } catch (IllegalArgumentException e) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
-      return null;
+      throw SpreadException.of(ErrorKind.JOB_NOT_FOUND);
     }
-    Job job = registry.find(id).orElse(null);
-    if (job == null) {
-      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
-      return null;
+    return registry.find(id).orElseThrow(() -> SpreadException.of(ErrorKind.JOB_NOT_FOUND));
+  }
+
+  private static ReadingDirection parseDirection(String value) {
+    try {
+      return ReadingDirection.valueOf(value.toUpperCase(Locale.ROOT));
+    } catch (IllegalArgumentException e) {
+      throw SpreadException.withDetail(
+          ErrorKind.INVALID_PARAMETER, "direction must be RTL or LTR but was: " + value, e);
     }
-    return job;
   }
 
   private static String toJson(ProgressEvent event) {

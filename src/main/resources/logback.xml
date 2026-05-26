@@ -2,11 +2,15 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%level] %logger{36} - %msg%n</pattern>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] [%-5level] [traceId=%X{traceId:-}] [jobId=%X{jobId:-}] %logger{36} - %msg%n%rEx</pattern>
         </encoder>
     </appender>
 
-    <root level="WARN">
+    <root level="INFO">
         <appender-ref ref="STDOUT" />
     </root>
+
+    <logger name="org.eclipse.jetty" level="WARN" />
+    <logger name="io.javalin" level="INFO" />
+    <logger name="org.apache.pdfbox" level="WARN" />
 </configuration>

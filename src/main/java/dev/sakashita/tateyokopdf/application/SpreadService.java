@@ -4,6 +4,8 @@ import dev.sakashita.tateyokopdf.domain.model.*;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.domain.strategy.PaginationStrategy;
 import dev.sakashita.tateyokopdf.port.*;
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.Validators;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,9 +31,7 @@ public class SpreadService {
   }
 
   public void execute(SpreadOptions options) {
-    if (!java.nio.file.Files.exists(options.sourcePath())) {
-      throw new IllegalArgumentException("Source file does not exist: " + options.sourcePath());
-    }
+    Validators.requireExists(options.sourcePath(), ErrorKind.PDF_NOT_FOUND);
     long startTime = System.currentTimeMillis();
 
     try (var source = documentFactory.openSource(options.sourcePath());

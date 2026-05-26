@@ -1,20 +1,16 @@
 package dev.sakashita.tateyokopdf.web.routes;
 
-import gg.jte.TemplateEngine;
-import gg.jte.output.StringOutput;
 import io.javalin.http.Context;
 
 public final class PageController {
 
-  private final TemplateEngine engine;
+  private final ViewRenderer renderer;
 
-  public PageController(TemplateEngine engine) {
-    this.engine = engine;
+  public PageController(ViewRenderer renderer) {
+    this.renderer = renderer;
   }
 
   public void index(Context ctx) {
-    var out = new StringOutput();
-    engine.render("index.jte", null, out);
-    ctx.html(out.toString());
+    renderer.renderHtml(ctx, "index.jte", null);
   }
 }

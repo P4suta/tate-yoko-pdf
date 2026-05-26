@@ -42,3 +42,5 @@ bin/
 ### Binary / media files ###
 *.pdf
 *.PDF
+### Claude Code session/plan/memory
+.claude/

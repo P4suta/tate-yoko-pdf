@@ -3,7 +3,8 @@ package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
-import dev.sakashita.tateyokopdf.port.exception.DocumentWriteException;
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -44,7 +45,7 @@ public class PdfBoxSpreadDocument implements SpreadDocument {
         cs.restoreGraphicsState();
       }
     } catch (IOException e) {
-      throw new DocumentWriteException("Failed to create spread page", e);
+      throw SpreadException.of(ErrorKind.PDF_WRITE_FAILED, e);
     }
 
     log.debug(
@@ -58,9 +59,9 @@ public class PdfBoxSpreadDocument implements SpreadDocument {
   public void save(Path destination) {
     try {
       document.save(destination.toFile());
-      log.info("Saved output to {}", destination);
+      log.info("Saved output to {}", destination.getFileName());
     } catch (IOException e) {
-      throw new DocumentWriteException("Failed to save output PDF: " + destination, e);
+      throw SpreadException.withDetail(ErrorKind.PDF_WRITE_FAILED, "destination=" + destination, e);
     }
   }
 

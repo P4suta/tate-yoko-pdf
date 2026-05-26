@@ -1,5 +1,7 @@
 package dev.sakashita.tateyokopdf.web;
 
+import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
+import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
 import dev.sakashita.tateyokopdf.web.lifecycle.SingleInstanceLock;
@@ -7,6 +9,8 @@ import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
 import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
+import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
+import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
@@ -46,6 +50,7 @@ public final class WebLauncher {
     int port = resolvePort();
 
     TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
+    ViewRenderer renderer = new ViewRenderer(engine);
     JobRegistry registry = new JobRegistry();
     ExecutorService workers =
         Executors.newFixedThreadPool(
@@ -55,8 +60,10 @@ public final class WebLauncher {
               t.setDaemon(true);
               return t;
             });
-    PageController pages = new PageController(engine);
-    JobController jobs = new JobController(registry, engine, workers);
+
+    PageController pages = new PageController(renderer);
+    JobController jobs = new JobController(registry, renderer, workers);
+    WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
@@ -64,26 +71,7 @@ public final class WebLauncher {
     IdleShutdown idle = new IdleShutdown(IDLE_TIMEOUT, IDLE_CHECK_INTERVAL, () -> System.exit(0));
     idle.start();
 
-    Javalin app =
-        Javalin.create(
-                config -> {
-                  config.startup.showJavalinBanner = false;
-                  config.http.maxRequestSize = MAX_UPLOAD_BYTES;
-                  config.routes.get("/health", ctx -> ctx.result("OK"));
-                  config.routes.get("/", pages::index);
-                  config.routes.post("/jobs", jobs::submit);
-                  config.routes.get("/jobs/{id}/progress", jobs::showProgress);
-                  config.routes.get("/jobs/{id}/result", jobs::showResult);
-                  config.routes.get("/jobs/{id}/download", jobs::download);
-                  config.routes.ws("/jobs/{id}/ws", ws -> ws.onConnect(jobs::onProgressWs));
-                  config.routes.ws(
-                      "/ws/keepalive",
-                      ws -> {
-                        ws.onConnect(ctx -> idle.onConnect());
-                        ws.onClose(ctx -> idle.onDisconnect());
-                      });
-                })
-            .start(bind, port);
+    Javalin app = buildJavalin(pages, jobs, idle, exHandler, MAX_UPLOAD_BYTES).start(bind, port);
     int actualPort = app.port();
     lock.claim(actualPort);
 
@@ -120,6 +108,38 @@ public final class WebLauncher {
     } catch (InterruptedException ignored) {
       Thread.currentThread().interrupt();
     }
+  }
+
+  public static Javalin buildJavalin(
+      PageController pages,
+      JobController jobs,
+      IdleShutdown idle,
+      WebExceptionHandler exHandler,
+      long maxUploadBytes) {
+    return Javalin.create(
+        config -> {
+          config.startup.showJavalinBanner = false;
+          config.http.maxRequestSize = maxUploadBytes;
+          config.routes.before(RequestTracingFilter::before);
+          config.routes.after(RequestTracingFilter::after);
+          config.routes.get("/health", ctx -> ctx.result("OK"));
+          config.routes.get("/", pages::index);
+          config.routes.post("/jobs", jobs::submit);
+          config.routes.get("/jobs/{id}/progress", jobs::showProgress);
+          config.routes.get("/jobs/{id}/result", jobs::showResult);
+          config.routes.get("/jobs/{id}/download", jobs::download);
+          config.routes.ws("/jobs/{id}/ws", ws -> ws.onConnect(jobs::onProgressWs));
+          config.routes.ws(
+              "/ws/keepalive",
+              ws -> {
+                ws.onConnect(ctx -> idle.onConnect());
+                ws.onClose(ctx -> idle.onDisconnect());
+              });
+          config.routes.exception(SpreadException.class, exHandler::handleDomain);
+          config.routes.exception(Exception.class, exHandler::handleUnknown);
+          config.routes.error(404, exHandler::handleNotFound);
+          config.routes.error(413, exHandler::handleTooLarge);
+        });
   }
 
   private static int resolvePort() {
