@@ -57,7 +57,7 @@ public final class IdleShutdown {
   public void start() {
     task =
         scheduler.scheduleAtFixedRate(
-            this::check, checkInterval.toSeconds(), checkInterval.toSeconds(), TimeUnit.SECONDS);
+            this::check, checkInterval.toMillis(), checkInterval.toMillis(), TimeUnit.MILLISECONDS);
   }
 
   public void stop() {

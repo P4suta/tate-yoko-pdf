@@ -44,3 +44,6 @@ bin/
 *.PDF
 ### Claude Code session/plan/memory
 .claude/
+
+### jqwik database (property test cache)
+.jqwik-database
