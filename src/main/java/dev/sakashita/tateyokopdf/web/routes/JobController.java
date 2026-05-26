@@ -32,7 +32,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
@@ -110,8 +109,10 @@ public final class JobController {
   }
 
   public void showProgress(Context ctx) {
+    // progress.jte and result.jte each declare a single `@param Job job`, which jte
+    // binds positionally — passing a Map here would be reflected as a type mismatch.
     Job job = lookup(ctx);
-    renderer.renderHtml(ctx, "progress.jte", Map.of("job", job));
+    renderer.renderHtml(ctx, "progress.jte", job);
   }
 
   public void showResult(Context ctx) {
@@ -120,7 +121,7 @@ public final class JobController {
       ctx.redirect("/jobs/" + job.id() + "/progress");
       return;
     }
-    renderer.renderHtml(ctx, "result.jte", Map.of("job", job));
+    renderer.renderHtml(ctx, "result.jte", job);
   }
 
   public void onProgressWs(WsConnectContext ctx) {
