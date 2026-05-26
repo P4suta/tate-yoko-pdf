@@ -1,0 +1,66 @@
+package dev.sakashita.tateyokopdf.application;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatNullPointerException;
+
+import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+final class SpreadOptionsTest {
+
+  @Test
+  void recordHoldsAllFields() {
+    var opt = new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.LTR, true);
+    assertThat(opt.sourcePath()).isEqualTo(Path.of("a.pdf"));
+    assertThat(opt.outputPath()).isEqualTo(Path.of("b.pdf"));
+    assertThat(opt.direction()).isEqualTo(ReadingDirection.LTR);
+    assertThat(opt.coverSingle()).isTrue();
+  }
+
+  @Test
+  void rejectsNullSourcePath() {
+    assertThatNullPointerException()
+        .isThrownBy(() -> new SpreadOptions(null, Path.of("b.pdf"), ReadingDirection.RTL, false));
+  }
+
+  @Test
+  void rejectsNullOutputPath() {
+    assertThatNullPointerException()
+        .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), null, ReadingDirection.RTL, false));
+  }
+
+  @Test
+  void rejectsNullDirection() {
+    assertThatNullPointerException()
+        .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), null, false));
+  }
+
+  @Test
+  void withDefaultsDerivesOutputFromSourceName() {
+    var opt = SpreadOptions.withDefaults(Path.of("/tmp/foo.pdf"));
+    assertThat(opt.outputPath()).isEqualTo(Path.of("/tmp/foo_spread.pdf"));
+    assertThat(opt.direction()).isEqualTo(ReadingDirection.DEFAULT);
+    assertThat(opt.coverSingle()).isFalse();
+  }
+
+  @Test
+  void withDefaultsCaseInsensitivePdfExtension() {
+    assertThat(SpreadOptions.withDefaults(Path.of("a.PDF")).outputPath())
+        .isEqualTo(Path.of("a_spread.pdf"));
+    assertThat(SpreadOptions.withDefaults(Path.of("a.Pdf")).outputPath())
+        .isEqualTo(Path.of("a_spread.pdf"));
+  }
+
+  @Test
+  void withDefaultsLeavesNamesWithoutPdfExtensionUnchanged() {
+    // The replaceFirst regex requires a trailing .pdf to swap; without it the output equals input.
+    assertThat(SpreadOptions.withDefaults(Path.of("foo")).outputPath()).isEqualTo(Path.of("foo"));
+  }
+
+  @Test
+  void withDefaultsResolvesAlongsideSource() {
+    var opt = SpreadOptions.withDefaults(Path.of("/some/dir/x.pdf"));
+    assertThat(opt.outputPath().getParent()).isEqualTo(Path.of("/some/dir"));
+  }
+}

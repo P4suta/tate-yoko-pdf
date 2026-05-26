@@ -59,6 +59,7 @@ dependencies {
     testImplementation("nl.jqno.equalsverifier:equalsverifier:3.17.5")
     testImplementation("org.awaitility:awaitility:4.2.2")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.7")
+    testImplementation("net.jqwik:jqwik:1.9.2")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -101,10 +102,36 @@ tasks.withType<JavaCompile>().configureEach {
     }
 }
 
-tasks.test {
-    useJUnitPlatform()
-    finalizedBy(tasks.jacocoTestReport)
+jacoco {
+    toolVersion = "0.8.13"
 }
+
+tasks.test {
+    useJUnitPlatform {
+        includeEngines("junit-jupiter", "jqwik")
+    }
+    finalizedBy(tasks.jacocoTestReport)
+    maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
+    forkEvery = 0
+    // system-stubs needs reflective access to mutate env vars on JDK 17+.
+    jvmArgs(
+        "--add-opens=java.base/java.util=ALL-UNNAMED",
+        "--add-opens=java.base/java.lang=ALL-UNNAMED",
+    )
+    testLogging {
+        events("failed")
+        showStackTraces = true
+    }
+}
+
+val jacocoClassExcludes =
+    listOf(
+        "dev/sakashita/tateyokopdf/tools/**",
+        "dev/sakashita/tateyokopdf/Main.class",
+        "dev/sakashita/tateyokopdf/web/WebLauncher.class",
+        "dev/sakashita/tateyokopdf/web/WebLauncher\$*.class",
+        "dev/sakashita/tateyokopdf/web/BrowserLauncher.class",
+    )
 
 tasks.jacocoTestReport {
     dependsOn(tasks.test)
@@ -112,7 +139,116 @@ tasks.jacocoTestReport {
         xml.required = true
         html.required = true
     }
+    classDirectories.setFrom(
+        files(
+            classDirectories.files.map {
+                fileTree(it) { exclude(jacocoClassExcludes) }
+            },
+        ),
+    )
 }
+
+tasks.jacocoTestCoverageVerification {
+    dependsOn(tasks.jacocoTestReport)
+    classDirectories.setFrom(
+        files(
+            classDirectories.files.map {
+                fileTree(it) { exclude(jacocoClassExcludes) }
+            },
+        ),
+    )
+    violationRules {
+        rule {
+            // M3 will lift this once multipart upload happy-path tests land.
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.70".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.domain.*")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.95".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.90".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.application")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.65".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.infrastructure.*")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.75".toBigDecimal()
+            }
+            limit {
+                counter = "BRANCH"
+                value = "COVEREDRATIO"
+                minimum = "0.60".toBigDecimal()
+            }
+        }
+        rule {
+            // M3 will lift this once multipart upload happy-path tests land.
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.web.routes")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.30".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.web.job")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.85".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.web.lifecycle")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.70".toBigDecimal()
+            }
+        }
+        rule {
+            element = "PACKAGE"
+            includes = listOf("dev.sakashita.tateyokopdf.observability")
+            limit {
+                counter = "LINE"
+                value = "COVEREDRATIO"
+                minimum = "0.80".toBigDecimal()
+            }
+        }
+    }
+}
+
+tasks.check { dependsOn(tasks.jacocoTestCoverageVerification) }
 
 tasks.shadowJar {
     archiveBaseName = "tate-yoko-pdf"

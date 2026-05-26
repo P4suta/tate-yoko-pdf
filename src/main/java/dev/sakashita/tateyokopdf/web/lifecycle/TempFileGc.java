@@ -47,7 +47,7 @@ public final class TempFileGc {
   public void start() {
     task =
         scheduler.scheduleAtFixedRate(
-            this::sweep, sweepInterval.toSeconds(), sweepInterval.toSeconds(), TimeUnit.SECONDS);
+            this::sweep, sweepInterval.toMillis(), sweepInterval.toMillis(), TimeUnit.MILLISECONDS);
   }
 
   public void stop() {
