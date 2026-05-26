@@ -73,7 +73,7 @@ dependencies {
     testImplementation("io.javalin:javalin-testtools:7.2.2")
     testImplementation("org.mockito:mockito-core:5.14.2")
     testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
-    testImplementation("nl.jqno.equalsverifier:equalsverifier:3.17.5")
+    testImplementation("nl.jqno.equalsverifier:equalsverifier:4.5")
     testImplementation("org.awaitility:awaitility:4.2.2")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.7")
     testImplementation("net.jqwik:jqwik:1.9.2")
