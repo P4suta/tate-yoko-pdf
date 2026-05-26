@@ -1,6 +1,6 @@
 # tate-yoko-pdf
 
-**縦書き日本語スキャンPDFを、見開きレイアウトに変換するCLIツール**
+**縦書き日本語スキャンPDFを、見開きレイアウトに変換するツール（CLI + ブラウザGUI）**
 
 2つの縦長（ポートレート）ページを1つの横長（ランドスケープ）見開きページに結合し、右綴じ（RTL）の読み順を正しく再現します。どのPDFリーダーでも正しい見開き表示が得られます。
 
@@ -22,146 +22,161 @@
    ← 読み順が逆！                     → 正しい読み順！
 ```
 
-本ツールはソースPDFの連続する2ページを物理的に1ページへ結合し、RTL順で配置した新しいPDFを生成します。
-
 ---
 
-## 特徴
+## 2つの使い方
 
-- **ゼロ設定で実用可能** — 入力ファイルパスだけで正しい見開きPDFを生成
-- **OCRテキストレイヤー保持** — FormXObject方式によりテキスト・画像・ベクターを丸ごと保持
-- **不均一ページサイズ対応** — ペアごとの最大サイズに合わせて自動センタリング
-- **奇数ページ・表紙対応** — 最終ページや表紙を単独見開きとして処理
-- **RTL / LTR 両対応** — 縦書き（右綴じ）・横書き（左綴じ）を切り替え可能
-- **Fat JAR & ネイティブバイナリ** — Shadow JAR、またはGraalVM native-imageで単一バイナリ配布
+### A. ブラウザGUI（おすすめ）
 
----
+ダブルクリックで起動 → 既定ブラウザが自動で開く → PDFをドラッグして変換 → ダウンロード。
+インストール不要・サーバー設定不要・ネットワーク不要（完全ローカル）。
 
-## クイックスタート
-
-### 前提条件
-
-- Java 21 以上
-
-### ビルド
-
-```bash
-./gradlew build        # コンパイル＋全テスト実行
-./gradlew shadowJar    # Fat JAR を生成
+```
+$ ./tate-yoko-pdf       # 引数なしで起動
+→ http://127.0.0.1:NNNN/ がブラウザで開く
+→ フォームでPDFをアップロード、方向（RTL/LTR）、表紙単独を指定
+→ 進捗バーが完了 → ダウンロード
+→ ブラウザのタブを閉じれば、サーバーも自動シャットダウン
 ```
 
-### 実行
+特徴:
+- **WebSocketで進捗ストリーミング**（ポーリングなし）
+- **タブを閉じると自動シャットダウン**（WebSocket keepaliveで生存判定、60秒の猶予あり）
+- **多重起動防止**: 起動済みインスタンスがあればそのURLを開くだけ（ロックファイル + PID + /health 確認）
+- **一時ファイルの自動GC**: ダウンロード完了で即削除、未ダウンロードでも1時間でGC
+
+### B. CLI（パイプライン・自動化向け）
 
 ```bash
-# 最小構成（ゼロ設定）: RTL見開きを自動生成
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar novel.pdf
-# → novel_spread.pdf が生成される
-
-# 出力先を指定
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar novel.pdf -o output/novel_spreads.pdf
-
-# 表紙を単独見開きに
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar novel.pdf --cover-single
-
-# 横書きPDF用（LTR方向）
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar textbook.pdf -d LTR
-
-# 詳細ログを有効化
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar novel.pdf -v
-
-# ヘルプ表示
-java -jar build/libs/tate-yoko-pdf-1.0.0-all.jar --help
+./tate-yoko-pdf novel.pdf                       # ゼロ設定でRTL見開き
+./tate-yoko-pdf novel.pdf -o out/spread.pdf     # 出力先指定
+./tate-yoko-pdf novel.pdf --cover-single        # 表紙を単独見開きに
+./tate-yoko-pdf textbook.pdf -d LTR             # 横書きPDF用
+./tate-yoko-pdf novel.pdf -v                    # DEBUGログ
+./tate-yoko-pdf --help                          # ヘルプ
 ```
-
-### CLI オプション
 
 | オプション | 説明 | デフォルト |
 |---|---|---|
 | `<input>` | 入力PDFファイルパス（必須） | — |
 | `-o`, `--output` | 出力PDFファイルパス | `<input>_spread.pdf` |
 | `-d`, `--direction` | 読み順: `RTL` または `LTR` | `RTL` |
-| `--cover-single` | 表紙（1ページ目）を単独見開きにする | `false` |
-| `-v`, `--verbose` | DEBUGレベルのログ出力を有効化 | `false` |
+| `--cover-single` | 表紙を単独見開きにする | `false` |
+| `-v`, `--verbose` | DEBUGレベルのログ出力 | `false` |
+
+---
+
+## インストール
+
+各OSのネイティブ単一バイナリ（JREのインストール不要）を CI で 3 OS 並列にビルドしています。
+
+| OS | 配布物 | サイズ目安 |
+|---|---|---|
+| Linux x86_64 | `tate-yoko-pdf` （実行可能バイナリ） | ~48 MB |
+| Windows x86_64 | `tate-yoko-pdf.exe` | ~50 MB |
+| macOS | `tate-yoko-pdf` | ~55 MB |
+
+最新ビルドは [Actions の最新 run](https://github.com/P4suta/tate-yoko-pdf/actions/workflows/ci.yml) → 任意の成功 run → "Artifacts" から `tate-yoko-pdf-<os>` をダウンロードしてください。
+
+---
+
+## 開発
+
+開発環境は完全にDocker内で完結します。ホスト側に必要なものは git + Docker + （任意で）mise / lefthook / just のみ。
+
+### 初回セットアップ
+
+```bash
+mise install          # lefthook と just を入れる（任意・推奨）
+lefthook install      # pre-commit / pre-push hooks を有効化（任意）
+docker compose build dev
+```
+
+### 日常コマンド
+
+```bash
+just                  # 利用可能なレシピ一覧
+just check            # test + spotless + errorprone + nullaway + jacoco
+just test             # テストのみ
+just format           # spotlessApply
+just web              # JVMモードでWeb起動（http://127.0.0.1:8080/）
+just web-native       # native-imageでWeb起動
+just web-stop         # 停止
+just shadow           # shadowJar 生成
+just native           # native-image ビルド
+just sample-pdf       # build/test-data/sample.pdf を生成
+just typos            # 誤字スキャン
+just typos-fix        # 誤字自動修正
+just shell            # devコンテナでシェル
+```
+
+`just` を入れていない場合は `docker compose run --rm dev ./gradlew <task>` 形式でも同等。
+
+### 開発支援ツール
+
+| ツール | 役割 |
+|---|---|
+| Spotless + google-java-format | 全Javaソースのフォーマット強制 |
+| Error Prone | コンパイラ静的解析（数百のチェック） |
+| NullAway (JSpecify mode) | null安全性検査（`@Nullable` で表現） |
+| ben-manes versions plugin | 依存ライブラリの更新確認 |
+| JaCoCo | テストカバレッジ |
+| typos | コメント・識別子の誤字検出（自動修正） |
+| lefthook | git pre-commit / pre-push hook（spotless / typos / check） |
+| just | タスクランナー |
 
 ---
 
 ## アーキテクチャ
 
-**ヘキサゴナルアーキテクチャ（Ports & Adapters）** を採用し、ドメインロジックをPDFライブラリから完全に隔離しています。
+ヘキサゴナルアーキテクチャ（Ports & Adapters）を採用し、ドメインロジックをPDFライブラリから完全に隔離しています。Web層はCLI層と並列のprimary adapterとして追加。
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  CLI Layer                                                   │
-│  SpreadCommand (picocli) ── 手動DI ──> Infrastructure        │
-└──────────────┬───────────────────────────────────────────────┘
-               │
-┌──────────────▼───────────────────────────────────────────────┐
-│  Application Layer                                           │
-│  SpreadService (オーケストレーション)                          │
-└──────┬───────────────────┬───────────────────────────────────┘
-       │                   │
-┌──────▼──────┐   ┌────────▼──────────────────────────────────┐
-│ Domain Layer│   │  Port Layer                                │
-│ (純粋Java)  │   │  SourceDocument / SpreadDocument           │
-│             │   │  DocumentFactory                           │
-│ Calculator  │   │                  ▲                         │
-│ Pagination  │   └──────────────────┼─────────────────────────┘
-└─────────────┘                      │ implements
-                          ┌──────────┴─────────────────────────┐
-                          │  Infrastructure Layer               │
-                          │  PdfBox Implementations             │
-                          └────────────────────────────────────┘
+                ┌──────────────────────────────────────────┐
+                │   Primary Adapters                       │
+                │   ┌──────────────┐  ┌──────────────────┐ │
+                │   │  CLI         │  │  Web (Javalin)   │ │
+                │   │  picocli     │  │  JTE + WebSocket │ │
+                │   └──────┬───────┘  └────────┬─────────┘ │
+                └──────────┼───────────────────┼───────────┘
+                           │                   │
+                ┌──────────▼───────────────────▼───────────┐
+                │  Application Layer                        │
+                │  SpreadService (オーケストレーション)        │
+                └──────┬─────────────────────┬───────────────┘
+                       │                     │
+                ┌──────▼──────┐    ┌─────────▼───────────────┐
+                │ Domain      │    │  Port Layer              │
+                │ (純粋Java)   │    │  SourceDocument /        │
+                │             │    │  SpreadDocument /        │
+                │ Calculator  │    │  DocumentFactory         │
+                │ Pagination  │    └─────────┬───────────────┘
+                └─────────────┘              │ implements
+                                  ┌──────────▼───────────────┐
+                                  │  Infrastructure          │
+                                  │  PDFBox 実装               │
+                                  └──────────────────────────┘
 ```
 
-### 設計上のポイント
-
-| 設計判断 | 理由 |
-|---|---|
-| **ドメイン層にPDF依存なし** | 純粋なユニットテストが可能。PDFBoxの差し替えも容易 |
-| **Sealed Interface** | `PagePairSpec`、`PaginationStrategy` にパターンマッチングの網羅性保証 |
-| **FormXObject方式** | ページ全体をカプセル化し、OCR・注釈・ベクターを透過的に保持 |
-| **手動DI** | 小規模CLIツールにDIフレームワークのオーバーヘッドを持ち込まない |
-| **Graphics State管理** | `saveGraphicsState`/`restoreGraphicsState` で座標変換の独立性を保証 |
-
----
-
-## プロジェクト構造
+### Web層の追加コンポーネント
 
 ```
-dev.sakashita.tateyokopdf
-├── domain
-│   ├── model
-│   │   ├── PageDimension.java        # ページ寸法（validation, max()）
-│   │   ├── ReadingDirection.java     # RTL / LTR 列挙型
-│   │   ├── SpreadSpec.java           # 見開き寸法
-│   │   ├── LayoutPosition.java       # 配置オフセット座標
-│   │   ├── SpreadLayout.java         # レイアウト計算結果
-│   │   └── PagePairSpec.java         # sealed: Pair / Single
-│   ├── service
-│   │   └── SpreadLayoutCalculator.java  # 見開き幾何計算
-│   └── strategy
-│       ├── PaginationStrategy.java      # sealed interface
-│       ├── StandardPagination.java      # 順次ペアリング
-│       └── CoverSinglePagination.java   # 表紙単独ペアリング
-├── port
-│   ├── PageContent.java              # 不透明マーカーインターフェース
-│   ├── PagePlacement.java            # コンテンツ＋位置のバインド
-│   ├── SourceDocument.java           # ソースPDF操作インターフェース
-│   ├── SpreadDocument.java           # 出力PDF操作インターフェース
-│   ├── DocumentFactory.java          # ファクトリインターフェース
-│   └── exception/                    # SpreadException 階層
-├── infrastructure/pdfbox
-│   ├── PdfBoxPageContent.java        # FormXObject遅延インポート
-│   ├── PdfBoxSourceDocument.java     # CropBox/Rotation処理
-│   ├── PdfBoxSpreadDocument.java     # 見開きページ組み立て
-│   └── PdfBoxDocumentFactory.java    # PDF読み込み＋パスワード検出
-├── application
-│   ├── SpreadOptions.java            # 実行オプション（パス自動導出）
-│   ├── ProgressListener.java         # 進捗コールバック
-│   └── SpreadService.java            # メインオーケストレーター
-└── cli
-    ├── SpreadCommand.java            # picocli エントリポイント
-    └── ConsoleProgressListener.java  # コンソール進捗表示
+web/
+├── WebLauncher            # 起動シーケンス (lock check → server start → browser open)
+├── BrowserLauncher        # OS別ブラウザ起動 (xdg-open / open / start), AWT非依存
+├── routes/
+│   ├── PageController     # index.jte
+│   └── JobController      # submit / progress / result / download / WebSocket
+├── job/
+│   ├── Job + JobStatus    # sealed: Pending / Running / Completed / Failed
+│   ├── JobRegistry        # ジョブとプログレスリスナーの管理
+│   ├── ProgressEvent      # sealed: Started / Progress / Completed / Failed
+│   └── WebProgressListener # ProgressListener 実装、pub/sub fan-out
+└── lifecycle/
+    ├── IdleShutdown       # /ws/keepalive の生存数で自動シャットダウン判定
+    ├── SingleInstanceLock # PID + port を ~/.tate-yoko-pdf/app.lock で管理
+    ├── TempFileGc         # 1時間TTLで一時ディレクトリGC
+    └── WorkDirs           # 再帰削除ヘルパー
 ```
 
 ---
@@ -170,59 +185,30 @@ dev.sakashita.tateyokopdf
 
 | カテゴリ | 技術 | バージョン |
 |---|---|---|
-| 言語 | Java | 21+ |
-| PDF操作 | Apache PDFBox | 3.0.3 |
-| CLI | picocli | 4.7.6 |
-| ロギング | SLF4J + Logback | 1.5.12 |
-| ビルド | Gradle (Kotlin DSL) | 9.2.0 |
-| Fat JAR | Shadow Plugin | 9.0.0-beta12 |
-| ネイティブ | GraalVM native-image | 0.10.4 |
-| テスト | JUnit 5 + AssertJ | 5.11.3 / 3.26.3 |
+| 言語 | Java | 21 (toolchain 25でビルド) |
+| PDF操作 | Apache PDFBox | 3.0.7 |
+| CLI | picocli | 4.7.7 |
+| Web サーバ | Javalin | 7.2.2 |
+| HTML テンプレ | JTE（precompiled） | 3.2.4 |
+| ロギング | SLF4J + Logback | 1.5.32 |
+| ビルド | Gradle (Kotlin DSL) | 9.5.1 |
+| Fat JAR | Shadow Plugin | 9.4.1 |
+| ネイティブ | GraalVM native-image | 1.1.0 / GraalVM 25 |
+| テスト | JUnit Jupiter / AssertJ | 6.1.0 / 3.27.7 |
+| 静的解析 | Error Prone / NullAway / JSpecify | 2.49.0 / 0.13.4 / 1.0.0 |
+| フォーマット | Spotless + google-java-format | 8.5.1 / 1.35.0 |
+| カバレッジ | JaCoCo | (Gradle 同梱) |
 
 ---
 
 ## テスト
 
 ```bash
-./gradlew test    # 全テスト実行
+just check    # 全テスト + 静的解析 + カバレッジ
+just test     # テストのみ
 ```
 
-### テスト構成
-
-- **ドメイン層ユニットテスト** — PDF非依存の純粋な計算ロジック
-  - `SpreadLayoutCalculatorTest` — RTL/LTR配置、不均一サイズ、単独ページ
-  - `StandardPaginationTest` — 偶数/奇数ページ、エッジケース
-  - `CoverSinglePaginationTest` — 表紙単独シナリオ
-  - `PageDimensionTest` — バリデーション、max()
-- **統合テスト** — テスト用PDFをプログラマティックに生成し、エンドツーエンド検証
-  - `SpreadServiceIntegrationTest` — 4/5/1ページ、表紙モード、LTR方向
-
----
-
-## 処理フロー
-
-```
-入力PDF (N pages)
-    │
-    ▼
-┌─ PaginationStrategy ─────────────┐
-│  ページをペアリング                │
-│  [Pair(0,1), Pair(2,3), Single(4)]│
-└───────────────┬───────────────────┘
-                │
-    ┌───────────▼───────────┐
-    │  各ペアについてループ   │
-    │                       │
-    │  1. pageDimension()   │  ← ソースPDFから寸法取得
-    │  2. calculate()       │  ← 見開きレイアウト計算
-    │  3. pageContent()     │  ← FormXObjectとしてインポート
-    │  4. addSpread()       │  ← 出力PDFにページ追加
-    │                       │
-    └───────────┬───────────┘
-                │
-                ▼
-          出力PDF (spread)
-```
+ドメイン層は PDF非依存で純粋ユニットテスト、`SpreadServiceIntegrationTest` がプログラマティックPDFでE2E検証。JUnit 5 並列実行を有効化済み。
 
 ---
 

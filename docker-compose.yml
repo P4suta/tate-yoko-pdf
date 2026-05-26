@@ -1,0 +1,41 @@
+services:
+  dev:
+    build:
+      context: .
+      target: dev
+      args:
+        DEV_UID: ${DEV_UID:-1000}
+        DEV_GID: ${DEV_GID:-1000}
+    image: tate-yoko-pdf-dev:latest
+    container_name: tate-yoko-pdf-dev
+    volumes:
+      - .:/workspace
+      - gradle-cache:/home/dev/.gradle
+    working_dir: /workspace
+    environment:
+      TATE_YOKO_PORT: "8080"
+      TATE_YOKO_BIND: "0.0.0.0"
+      TATE_YOKO_NO_BROWSER: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    tty: true
+    stdin_open: true
+    command: ["bash"]
+
+  web:
+    extends:
+      service: dev
+    container_name: tate-yoko-pdf-web
+    profiles: ["web"]
+    command: ["java", "-jar", "build/libs/tate-yoko-pdf-all.jar"]
+
+  web-native:
+    extends:
+      service: dev
+    container_name: tate-yoko-pdf-web-native
+    profiles: ["web-native"]
+    working_dir: /workspace/build/native/nativeCompile
+    command: ["./tate-yoko-pdf"]
+
+volumes:
+  gradle-cache:

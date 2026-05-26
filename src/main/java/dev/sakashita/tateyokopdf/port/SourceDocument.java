@@ -4,12 +4,12 @@ import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 
 public interface SourceDocument extends AutoCloseable {
 
-    int pageCount();
+  int pageCount();
 
-    PageDimension pageDimension(int index);
+  PageDimension pageDimension(int index);
 
-    PageContent pageContent(int index);
+  PageContent pageContent(int index);
 
-    @Override
-    void close();
+  @Override
+  void close();
 }

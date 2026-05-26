@@ -1,4 +1,3 @@
 package dev.sakashita.tateyokopdf.port;
 
-public interface PageContent {
-}
+public interface PageContent {}
