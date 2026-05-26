@@ -5,6 +5,8 @@ yoko = "yoko"
 tate = "tate"
 # 技術設計書のシーケンス図で Strategy の短縮名として使っている
 strat = "strat"
+# Gradle CLI: `-P<prop>` で project property を指定する記法（typos は Pageant 誤字と誤検知）
+Pagent = "Pagent"
 
 [files]
 extend-exclude = [
