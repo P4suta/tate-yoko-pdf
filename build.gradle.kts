@@ -304,6 +304,12 @@ graalvmNative {
             mainClass = application.mainClass
             buildArgs.add("--no-fallback")
             buildArgs.add("-H:+ReportExceptionStackTraces")
+            // Windows-1252 and other charsets used by PDFBox's BaseParser static init.
+            buildArgs.add("-H:+UnlockExperimentalVMOptions")
+            buildArgs.add("-H:+AddAllCharsets")
+            // Force AWT into headless mode at build time so PDFBox' Raster/ColorModel
+            // <clinit> does not try to load X11-only graphics during the image build.
+            buildArgs.add("-J-Djava.awt.headless=true")
             resources.includedPatterns.add(".*\\.xml")
             resources.includedPatterns.add(".*\\.properties")
         }

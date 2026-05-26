@@ -1,10 +1,14 @@
-ARG GRAALVM_IMAGE=ghcr.io/graalvm/native-image-community:25
+# Liberica NIK Full ships strong AWT/Swing support out of the box, which the
+# stock GraalVM CE image does not — required because PDFBox' PDDocument static
+# initialiser pulls in java.awt.image.Raster/ColorModel and the matching JNI libs.
+ARG GRAALVM_IMAGE=bellsoft/liberica-native-image-kit-container:jdk-25-nik-25-glibc
 
 FROM ${GRAALVM_IMAGE} AS dev
 
-RUN (microdnf install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && microdnf clean all) \
- || (dnf install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && dnf clean all) \
- || (yum install -y findutils tar gzip git unzip which procps-ng shadow-utils curl && yum clean all)
+# Alpaquita Linux ships apk; install AWT/font runtime deps + dev tooling.
+RUN apk add --no-cache \
+      bash findutils tar gzip git unzip which procps shadow curl \
+      fontconfig freetype ttf-dejavu
 
 ARG TYPOS_VERSION=1.46.3
 RUN curl -fsSL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
@@ -34,9 +38,7 @@ CMD ["bash"]
 
 FROM ${GRAALVM_IMAGE} AS builder
 
-RUN (microdnf install -y findutils tar gzip unzip && microdnf clean all) \
- || (dnf install -y findutils tar gzip unzip && dnf clean all) \
- || (yum install -y findutils tar gzip unzip && yum clean all)
+RUN apk add --no-cache bash findutils tar gzip unzip fontconfig freetype
 
 WORKDIR /build
 COPY --chown=root:root gradle ./gradle
@@ -48,12 +50,19 @@ ENTRYPOINT []
 RUN ./gradlew --no-daemon nativeCompile
 
 
-FROM debian:stable-slim AS runtime
+# Use the matching BellSoft slim runtime so AWT/font libs match the build env.
+FROM bellsoft/liberica-runtime-container:jdk-25-slim-glibc AS runtime
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates xdg-utils \
- && rm -rf /var/lib/apt/lists/*
+# Font subsystem must be installed even in the slim runtime image.
+RUN apk add --no-cache fontconfig freetype ttf-dejavu ca-certificates
 
-COPY --from=builder /build/build/native/nativeCompile/tate-yoko-pdf /usr/local/bin/tate-yoko-pdf
+# Native binary + JDK shim libraries (libawt.so / libfontmanager.so / liblcms.so / ...)
+# emitted by `gradle nativeCompile`. They must live next to the executable; we set
+# LD_LIBRARY_PATH in the launcher so the dynamic loader actually finds them.
+COPY --from=builder /build/build/native/nativeCompile/ /opt/tate-yoko/
+
+RUN printf '#!/bin/sh\nexec env LD_LIBRARY_PATH=/opt/tate-yoko /opt/tate-yoko/tate-yoko-pdf "$@"\n' \
+      > /usr/local/bin/tate-yoko-pdf \
+ && chmod +x /usr/local/bin/tate-yoko-pdf
 
 ENTRYPOINT ["/usr/local/bin/tate-yoko-pdf"]
