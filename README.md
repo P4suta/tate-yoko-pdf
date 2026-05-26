@@ -68,7 +68,7 @@ $ ./tate-yoko-pdf       # 引数なしで起動
 
 ## インストール
 
-リリース成果物として、各OSのネイティブ単一バイナリを配布します（JREのインストール不要）。
+各OSのネイティブ単一バイナリ（JREのインストール不要）を CI で 3 OS 並列にビルドしています。
 
 | OS | 配布物 | サイズ目安 |
 |---|---|---|
@@ -76,7 +76,7 @@ $ ./tate-yoko-pdf       # 引数なしで起動
 | Windows x86_64 | `tate-yoko-pdf.exe` | ~50 MB |
 | macOS | `tate-yoko-pdf` | ~55 MB |
 
-最新版は [GitHub Releases](https://github.com/P4suta/tate-yoko-pdf/releases) から取得してください。
+最新ビルドは [Actions の最新 run](https://github.com/P4suta/tate-yoko-pdf/actions/workflows/ci.yml) → 任意の成功 run → "Artifacts" から `tate-yoko-pdf-<os>` をダウンロードしてください。
 
 ---
 
