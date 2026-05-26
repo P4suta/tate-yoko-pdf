@@ -36,8 +36,9 @@ jobs:
         with:
           java-version: '25'
           distribution: 'graalvm-community'
-          cache: 'gradle'
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      # setup-gradle handles caches + writes a per-job Build dashboard to the run summary.
+      - uses: gradle/actions/setup-gradle@v4
       - name: Gradle check (test + spotless + errorprone + nullaway + jacoco)
         run: ./gradlew check --no-daemon
       - name: Upload test reports
@@ -145,8 +146,8 @@ jobs:
         with:
           java-version: '25'
           distribution: 'graalvm-community'
-          cache: 'gradle'
           github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: gradle/actions/setup-gradle@v4
       - name: Native compile
         run: ./gradlew nativeCompile --no-daemon
       - name: Upload native binary
@@ -158,3 +159,34 @@ jobs:
             build/native/nativeCompile/*.dll
             build/native/nativeCompile/*.dylib
           if-no-files-found: ignore
+
+  # Surfaces recent main-branch CI wall-clock times in the run summary so any
+  # regression is visible without external dashboards. See docs/perf-baseline.md
+  # for the rolling history.
+  perf-report:
+    name: perf report
+    needs: [typos, check, native-linux, native-other]
+    if: always()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Median of last 10 successful main runs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "## CI wall-clock — last 10 successful main runs"
+            echo
+            gh run list --workflow=ci.yml --branch=main --limit 20 \
+                --json createdAt,updatedAt,conclusion,databaseId,headSha \
+                --repo "${{ github.repository }}" \
+              | jq -r '
+                  map(select(.conclusion == "success"))
+                  | map(. + {durationS: (((.updatedAt | fromdateiso8601) - (.createdAt | fromdateiso8601)) | floor)})
+                  | sort_by(.createdAt) | reverse | .[0:10]
+                  | (map(.durationS) | sort) as $sorted
+                  | "median: \($sorted[$sorted | length / 2 | floor])s, min: \($sorted[0])s, max: \($sorted[-1])s, n=\($sorted | length)"
+                ' || echo "(perf metrics unavailable)"
+          } >> "$GITHUB_STEP_SUMMARY"
