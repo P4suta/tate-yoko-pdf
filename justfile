@@ -15,15 +15,16 @@ dev-up:
 
 # Stop the long-lived dev container.
 dev-down:
-    -docker compose --profile dev down dev-daemon
+    -docker compose --profile dev down dev-daemon --remove-orphans
 
 # Run an arbitrary command inside dev-daemon (requires `just dev-up`).
 exec *cmd="bash":
     docker compose exec dev-daemon {{cmd}}
 
-# Dispatch into dev-daemon if running, else a one-shot `docker compose run --rm dev`
-[private]
-_run *args:
+# Dispatch into dev-daemon if running, else a one-shot `docker compose run --rm dev`.
+# Also the integration point for lefthook hooks, so they pick up `dev-daemon` when
+# the user has run `just dev-up`.
+dev-run *args:
     @if [ -n "$(docker ps -q -f name=tate-yoko-pdf-dev-daemon)" ]; then \
         docker compose exec -T dev-daemon {{args}}; \
     else \
@@ -40,23 +41,23 @@ shell:
 
 # Run the full check (test + spotless + errorprone + nullaway + jacoco)
 check:
-    @just _run ./gradlew check
+    @just dev-run ./gradlew check
 
 # Run tests only
 test:
-    @just _run ./gradlew test
+    @just dev-run ./gradlew test
 
 # Apply spotless formatting
 format:
-    @just _run ./gradlew spotlessApply
+    @just dev-run ./gradlew spotlessApply
 
 # Build the fat shadowJar
 shadow:
-    @just _run ./gradlew shadowJar
+    @just dev-run ./gradlew shadowJar
 
 # Build the native-image binary
 native:
-    @just _run ./gradlew nativeCompile
+    @just dev-run ./gradlew nativeCompile
 
 # Start the web app in JVM mode (background); http://127.0.0.1:8080/
 web: shadow
@@ -70,38 +71,38 @@ web-native: native
 
 # Stop any running web container
 web-stop:
-    -docker compose --profile web down web
-    -docker compose --profile web-native down web-native
+    -docker compose --profile web down web --remove-orphans
+    -docker compose --profile web-native down web-native --remove-orphans
 
 # Generate a 4-page sample PDF at build/test-data/sample.pdf
 sample-pdf:
-    @just _run ./gradlew createSamplePdf
+    @just dev-run ./gradlew createSamplePdf
 
 # Auto-fix typos across the repo
 typos-fix:
-    @just _run typos --write-changes
+    @just dev-run typos --write-changes
 
 # Report typos without auto-fixing
 typos:
-    @just _run typos
+    @just dev-run typos
 
 # Remove build outputs
 clean:
-    @just _run ./gradlew clean
+    @just dev-run ./gradlew clean
 
 # Report outdated deps (Gradle deps/plugins + Dockerfile/spotless/jacoco/security pins)
 outdated:
-    @just _run ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
+    @just dev-run ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
 
 # Pre-pull base image + build dev image + warm Gradle cache. Useful first-run / onboarding.
 warmup:
     docker compose build dev
-    @just _run ./gradlew --quiet help
+    @just dev-run ./gradlew --quiet help
     @echo "→ dev image built, Gradle cache primed."
 
 # Reproduce CI's Linux native smoke (build + CLI + web upload/download) locally.
 smoke: native
-    @just _run bash -c '\
+    @just dev-run bash -c '\
         ./build/native/nativeCompile/tate-yoko-pdf \
             build/test-data/sample.pdf \
             -o build/test-data/native-out.pdf \
@@ -111,5 +112,21 @@ smoke: native
 
 # Run JVM tests under the native-image agent to auto-generate reflect/proxy/resource config
 trace:
-    @just _run ./gradlew -Pagent test
+    @just dev-run ./gradlew -Pagent test
     @echo "→ Agent config written under build/agent-config/. Diff it against META-INF/native-image/."
+
+# Remove this project's Docker artifacts (containers, networks, named volumes, locally-built images).
+docker-clean:
+    docker compose --profile dev --profile web --profile web-native down -v --remove-orphans --rmi local
+
+# Show Docker disk usage (machine-wide) and this project's container/volume state.
+docker-status:
+    docker system df
+    @echo
+    @echo '--- tate-yoko-pdf ---'
+    -docker compose --profile dev --profile web --profile web-native ps -a
+    docker volume ls --filter 'label=com.docker.compose.project=tate-yoko-pdf'
+
+# Launch an interactive TUI (lazydocker) to inspect machine-wide Docker state.
+docker-tui:
+    lazydocker
