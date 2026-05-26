@@ -3,18 +3,27 @@ pre-commit:
   commands:
     spotless-apply:
       glob: "*.{java,kt,kts}"
-      run: docker compose run --rm -T dev ./gradlew spotlessApply --quiet
+      run: just dev-run ./gradlew spotlessApply --quiet
       stage_fixed: true
     typos-fix:
-      run: docker compose run --rm -T dev typos --write-changes {staged_files}
+      run: just dev-run typos --write-changes {staged_files}
       stage_fixed: true
 
 pre-push:
-  parallel: true
+  # Sequential. `check` and `outdated` both hit the `gradle-cache` volume; with
+  # parallel: true the second Gradle daemon just blocks on file locks, so wall
+  # time is similar to piped but with extra contention overhead.
+  # (Merging into one invocation is blocked by ben-manes 0.54 needing
+  # --no-parallel + --no-configuration-cache, which would slow `check`.)
+  # Order: typos (fast, fail-fast) → check (heavy) → outdated.
+  piped: true
   commands:
-    check:
-      run: docker compose run --rm -T dev ./gradlew check --quiet
     typos:
-      run: docker compose run --rm -T dev typos
+      priority: 1
+      run: just dev-run typos
+    check:
+      priority: 2
+      run: just dev-run ./gradlew check --quiet
     outdated:
-      run: docker compose run --rm -T dev ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none -PfailOnUpdates=true dependencyUpdates
+      priority: 3
+      run: just dev-run ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none -PfailOnUpdates=true dependencyUpdates

@@ -108,6 +108,9 @@ just sample-pdf       # build/test-data/sample.pdf を生成
 just typos            # 誤字スキャン
 just typos-fix        # 誤字自動修正
 just shell            # devコンテナでシェル
+just docker-status    # Docker のディスク占有と本プロジェクトの状態を表示
+just docker-tui       # lazydocker でマシン全体の Docker 状態を TUI で確認
+just docker-clean     # 本プロジェクトの Docker artifacts (container/network/named volume/image) を一掃
 ```
 
 `just` を入れていない場合は `docker compose run --rm dev ./gradlew <task>` 形式でも同等。

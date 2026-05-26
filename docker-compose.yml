@@ -1,3 +1,7 @@
+# Fix the project name so that artifacts (volumes/networks/containers) always
+# land under `tate-yoko-pdf`, regardless of cwd / worktree / dir rename.
+name: tate-yoko-pdf
+
 services:
   dev:
     build:
@@ -8,6 +12,9 @@ services:
         DEV_GID: ${DEV_GID:-1000}
     image: tate-yoko-pdf-dev:latest
     container_name: tate-yoko-pdf-dev
+    # Pinned to "no" so the dev container never auto-restarts on host reboot;
+    # `just dev-up` is the only way it should come up.
+    restart: "no"
     volumes:
       - .:/workspace
       - gradle-cache:/home/dev/.gradle
@@ -49,3 +56,6 @@ services:
 
 volumes:
   gradle-cache:
+    # Opt out of the host-wide `docker-prune.timer` so the Gradle cache
+    # survives weekly cleanups even when no container is currently using it.
+    labels: ["docker-prune.keep=true"]
