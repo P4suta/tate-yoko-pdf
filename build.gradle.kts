@@ -525,9 +525,11 @@ graalvmNative {
             // this GraalVM 25 defaults to a higher microarch level and the binary
             // can SIGILL on older hardware end-users may still have.
             buildArgs.add("-march=compatibility")
-            // Logback / SLF4J are safe to initialize at build time and doing so
-            // both shrinks the image and trims startup latency.
-            buildArgs.add("--initialize-at-build-time=org.slf4j,ch.qos.logback")
+            // (`--initialize-at-build-time=ch.qos.logback` looks appealing but
+            //  logback transitively touches `org.xml.sax.helpers.LocatorImpl`,
+            //  which native-image refuses to initialize at build time. Leaving
+            //  logback as run-time-initialized; the metadata repo already covers
+            //  the substantive reachability work.)
             resources.includedPatterns.add(".*\\.xml")
             resources.includedPatterns.add(".*\\.properties")
         }
