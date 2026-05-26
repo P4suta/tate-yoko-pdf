@@ -2,37 +2,43 @@ package dev.sakashita.tateyokopdf.web.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
 import org.junit.jupiter.api.Test;
 
 final class ProgressEventTest {
 
   @Test
-  void startedHoldsTotal() {
-    var e = new ProgressEvent.Started(10);
+  void startedHoldsTotalAndTraceId() {
+    var e = new ProgressEvent.Started(10, "abc");
     assertThat(e.total()).isEqualTo(10);
+    assertThat(e.traceId()).isEqualTo("abc");
   }
 
   @Test
-  void progressHoldsCounters() {
-    var e = new ProgressEvent.Progress(3, 7);
+  void progressHoldsCountersAndTraceId() {
+    var e = new ProgressEvent.Progress(3, 7, "xyz");
     assertThat(e.current()).isEqualTo(3);
     assertThat(e.total()).isEqualTo(7);
+    assertThat(e.traceId()).isEqualTo("xyz");
   }
 
   @Test
-  void completedIsInstantiable() {
-    assertThat(new ProgressEvent.Completed()).isNotNull();
+  void completedHoldsTraceId() {
+    var e = new ProgressEvent.Completed("done");
+    assertThat(e.traceId()).isEqualTo("done");
   }
 
   @Test
-  void failedHoldsMessage() {
-    var e = new ProgressEvent.Failed("oops");
+  void failedHoldsKindMessageAndTraceId() {
+    var e = new ProgressEvent.Failed(ErrorKind.PDF_CORRUPTED, "oops", "t-1");
+    assertThat(e.errorKind()).isEqualTo(ErrorKind.PDF_CORRUPTED);
     assertThat(e.message()).isEqualTo("oops");
+    assertThat(e.traceId()).isEqualTo("t-1");
   }
 
   @Test
   void sealedSwitchHandlesAllCases() {
-    ProgressEvent ev = new ProgressEvent.Started(1);
+    ProgressEvent ev = new ProgressEvent.Started(1, "t");
     String label =
         switch (ev) {
           case ProgressEvent.Started s -> "started";

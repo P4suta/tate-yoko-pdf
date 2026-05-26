@@ -7,6 +7,7 @@ import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
+import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
@@ -39,7 +40,7 @@ public final class WebTestHarness {
               return t;
             });
     PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers);
+    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
     IdleShutdown idle =
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
     WebExceptionHandler exHandler = new WebExceptionHandler(renderer);

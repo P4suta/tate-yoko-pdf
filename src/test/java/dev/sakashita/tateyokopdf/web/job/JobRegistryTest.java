@@ -72,20 +72,21 @@ final class JobRegistryTest {
     var jobs = ConcurrentHashMap.<UUID>newKeySet();
     try {
       for (int t = 0; t < threads; t++) {
-        pool.submit(
-            () -> {
-              try {
-                start.await();
-                for (int i = 0; i < perThread; i++) {
-                  var j = reg.register(Path.of("/w"), Path.of("/in"), Path.of("/out"), "x.pdf");
-                  jobs.add(j.id());
-                }
-              } catch (InterruptedException ie) {
-                Thread.currentThread().interrupt();
-              } finally {
-                done.countDown();
-              }
-            });
+        var unused =
+            pool.submit(
+                () -> {
+                  try {
+                    start.await();
+                    for (int i = 0; i < perThread; i++) {
+                      var j = reg.register(Path.of("/w"), Path.of("/in"), Path.of("/out"), "x.pdf");
+                      jobs.add(j.id());
+                    }
+                  } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                  } finally {
+                    done.countDown();
+                  }
+                });
       }
       start.countDown();
       assertThat(done.await(10, TimeUnit.SECONDS)).isTrue();

@@ -53,11 +53,12 @@ public final class WebExceptionHandler {
     String traceId = traceIdOf(ctx);
     logError(mapping, traceId, t);
     renderer.renderError(ctx, mapping, traceId);
-    ctx.attribute(ATTR_HANDLED, Boolean.TRUE);
+    ctx.attribute(ATTR_HANDLED, true);
   }
 
   private static boolean alreadyHandled(Context ctx) {
-    return Boolean.TRUE.equals(ctx.attribute(ATTR_HANDLED));
+    Boolean v = ctx.attribute(ATTR_HANDLED);
+    return v != null && v;
   }
 
   private static String traceIdOf(Context ctx) {
