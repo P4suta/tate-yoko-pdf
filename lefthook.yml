@@ -16,3 +16,5 @@ pre-push:
       run: docker compose run --rm -T dev ./gradlew check --quiet
     typos:
       run: docker compose run --rm -T dev typos
+    outdated:
+      run: docker compose run --rm -T dev ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none -PfailOnUpdates=true dependencyUpdates

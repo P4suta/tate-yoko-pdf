@@ -317,10 +317,12 @@ tasks.withType<DependencyUpdatesTask>().configureEach {
 tasks.register("checkExtraVersions") {
     group = "help"
     description = "Diff non-Gradle pinned versions against upstream stable releases"
-    // Capture files at configuration time so doLast doesn't hold a Project reference
-    // (keeps the task config-cache compatible despite the network IO).
+    // Capture files and properties at configuration time so doLast doesn't hold
+    // a Project reference (keeps the task config-cache compatible despite network IO).
     val dockerfile = rootProject.file("Dockerfile")
     val buildScript = rootProject.file("build.gradle.kts")
+    val failOnUpdates =
+        providers.gradleProperty("failOnUpdates").map { it.toBoolean() }.getOrElse(false)
     outputs.upToDateWhen { false }
 
     doLast {
@@ -401,6 +403,7 @@ tasks.register("checkExtraVersions") {
         }
 
         var updates = 0
+        var headCount = 0
 
         fun report(
             name: String,
@@ -418,6 +421,7 @@ tasks.register("checkExtraVersions") {
                     }
 
                     versionComparator.compare(current, latest) > 0 -> {
+                        headCount++
                         "HEAD"
                     }
 
@@ -471,6 +475,14 @@ tasks.register("checkExtraVersions") {
 
         println()
         println("$updates update(s) available")
+
+        val totalProblems = updates + headCount + unknownDockerArgs.size
+        if (failOnUpdates && totalProblems > 0) {
+            throw GradleException(
+                "$totalProblems pin(s) need attention (updates=$updates, head=$headCount, unknown=${unknownDockerArgs.size}). " +
+                    "Re-run without -PfailOnUpdates=true to see the report and resolve.",
+            )
+        }
     }
 }
 // ---- end `just outdated` plumbing --------------------------------------------
