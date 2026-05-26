@@ -5,14 +5,18 @@ on:
     types: [opened, synchronize, reopened, labeled]
 
 # Only run for Dependabot PRs. Other PRs are short-circuited by the if-guard.
+# Top-level minimal default; the job below repeats the grant explicitly so
+# CodeQL's actions/missing-workflow-permissions rule is satisfied per-job too.
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
   auto-merge:
     if: github.actor == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write       # gh pr merge requires write to merge
+      pull-requests: write  # gh pr merge --auto sets the auto-merge flag
     steps:
       - name: Fetch Dependabot metadata
         id: meta
