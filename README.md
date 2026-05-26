@@ -193,7 +193,7 @@ web/
 | ロギング | SLF4J + Logback | 1.5.32 |
 | ビルド | Gradle (Kotlin DSL) | 9.5.1 |
 | Fat JAR | Shadow Plugin | 9.4.1 |
-| ネイティブ | GraalVM native-image | 1.1.0 / GraalVM 25 |
+| ネイティブ | GraalVM native-image / Liberica NIK Full (AWT 対応) | 1.1.0 / NIK 25 |
 | テスト | JUnit Jupiter / AssertJ | 6.1.0 / 3.27.7 |
 | 静的解析 | Error Prone / NullAway / JSpecify | 2.49.0 / 0.13.4 / 1.0.0 |
 | フォーマット | Spotless + google-java-format | 8.5.1 / 1.35.0 |
@@ -274,6 +274,13 @@ JaCoCo は層別 threshold で `check` の必須ゲート: `domain.*` 95% / `app
 | `GET /health` | 後方互換 (= `/health/ready`) | 同上 |
 
 disk threshold は env `TATE_YOKO_HEALTH_MIN_FREE_MB` で上書き可能 (デフォルト 100MB)。
+
+### ネイティブバイナリ (AWT / フォント)
+
+PDFBox の内部実装は `java.awt.image.Raster` を経由してフォントとカラーマネジメントを扱うため、native-image には AWT/Swing 対応が必要です。本プロジェクトは [Liberica NIK Full](https://hub.docker.com/r/bellsoft/liberica-native-image-kit-container) (BellSoft の GraalVM 派生で AWT サポート強化版) を Docker 経由でビルドに使用し、runtime image には `fontconfig` / `libfreetype6` をバンドルしています (`Dockerfile`)。`just native` / `just web-native` でビルド・起動できます。
+
+- **Linux**: Liberica NIK で実 PDF 変換まで動作 (CI で smoke 済)
+- **macOS / Windows**: ネイティブバイナリは stock GraalVM CE でビルドされており、AWT 制約のため実 PDF 変換は未対応。当面は `shadowJar` (JVM mode) 推奨
 
 ---
 
