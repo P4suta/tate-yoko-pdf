@@ -1,5 +1,8 @@
 package dev.sakashita.tateyokopdf.web;
 
+import dev.sakashita.tateyokopdf.web.routes.PageController;
+import gg.jte.ContentType;
+import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
 import java.net.ServerSocket;
 import java.net.URI;
@@ -15,11 +18,15 @@ public final class WebLauncher {
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
     int port = resolvePort();
 
+    TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
+    PageController pages = new PageController(engine);
+
     Javalin app =
         Javalin.create(
                 config -> {
                   config.startup.showJavalinBanner = false;
                   config.routes.get("/health", ctx -> ctx.result("OK"));
+                  config.routes.get("/", pages::index);
                 })
             .start(bind, port);
     int actualPort = app.port();

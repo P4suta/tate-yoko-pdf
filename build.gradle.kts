@@ -10,6 +10,7 @@ plugins {
     id("com.diffplug.spotless") version "8.5.1"
     id("net.ltgt.errorprone") version "5.1.0"
     id("com.github.ben-manes.versions") version "0.54.0"
+    id("gg.jte.gradle") version "3.2.4"
 }
 
 group = "dev.sakashita"
@@ -50,6 +51,12 @@ dependencies {
     testImplementation("org.assertj:assertj-core:3.27.7")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+jte {
+    generate()
+    binaryStaticContent = true
+    contentType = gg.jte.ContentType.Html
 }
 
 spotless {
