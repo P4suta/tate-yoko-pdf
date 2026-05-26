@@ -18,6 +18,9 @@ import io.javalin.http.Context;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.UploadedFile;
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -125,6 +128,53 @@ public final class JobController {
     var out = new StringOutput();
     engine.render("result.jte", Map.of("job", job), out);
     ctx.html(out.toString());
+  }
+
+  public void download(Context ctx) {
+    UUID id;
+    try {
+      id = UUID.fromString(ctx.pathParam("id"));
+    } catch (IllegalArgumentException e) {
+      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+      return;
+    }
+    Job job = registry.find(id).orElse(null);
+    if (job == null) {
+      ctx.status(HttpStatus.NOT_FOUND).result("Job not found");
+      return;
+    }
+    Path output = job.outputPath();
+    if (!Files.isRegularFile(output)) {
+      ctx.status(HttpStatus.GONE).result("Output file no longer available");
+      return;
+    }
+
+    long size;
+    InputStream stream;
+    try {
+      size = Files.size(output);
+      stream = Files.newInputStream(output);
+    } catch (IOException e) {
+      log.error("Failed to open output for job {}", id, e);
+      ctx.status(HttpStatus.INTERNAL_SERVER_ERROR).result("Failed to read output");
+      return;
+    }
+
+    ctx.contentType("application/pdf");
+    ctx.header(
+        "Content-Disposition",
+        "attachment; filename*=UTF-8''" + urlEncode(downloadName(job.originalName())));
+    ctx.header("Content-Length", Long.toString(size));
+    ctx.result(stream);
+  }
+
+  private static String downloadName(String originalName) {
+    String base = originalName.replaceFirst("(?i)\\.pdf$", "");
+    return base + "_spread.pdf";
+  }
+
+  private static String urlEncode(String s) {
+    return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
   }
 
   private void renderError(Context ctx, String message) {

@@ -36,6 +36,7 @@ public final class WebLauncher {
                   config.routes.get("/", pages::index);
                   config.routes.post("/jobs", jobs::submit);
                   config.routes.get("/jobs/{id}/result", jobs::showResult);
+                  config.routes.get("/jobs/{id}/download", jobs::download);
                 })
             .start(bind, port);
     int actualPort = app.port();

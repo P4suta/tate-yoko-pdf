@@ -104,6 +104,14 @@ tasks.shadowJar {
     mergeServiceFiles()
 }
 
+tasks.register<JavaExec>("createSamplePdf") {
+    group = "verification"
+    description = "Generate a sample multi-page PDF for manual / smoke testing"
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "dev.sakashita.tateyokopdf.tools.SamplePdfGenerator"
+    args = listOf("build/test-data/sample.pdf", "4")
+}
+
 graalvmNative {
     binaries {
         named("main") {
