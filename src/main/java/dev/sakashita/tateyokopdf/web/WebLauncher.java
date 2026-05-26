@@ -1,5 +1,7 @@
 package dev.sakashita.tateyokopdf.web;
 
+import dev.sakashita.tateyokopdf.web.job.JobRegistry;
+import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
@@ -14,19 +16,26 @@ public final class WebLauncher {
 
   private static final Logger log = LoggerFactory.getLogger(WebLauncher.class);
 
+  private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
+
   public void run() {
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
     int port = resolvePort();
 
     TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
+    JobRegistry registry = new JobRegistry();
     PageController pages = new PageController(engine);
+    JobController jobs = new JobController(registry, engine);
 
     Javalin app =
         Javalin.create(
                 config -> {
                   config.startup.showJavalinBanner = false;
+                  config.http.maxRequestSize = MAX_UPLOAD_BYTES;
                   config.routes.get("/health", ctx -> ctx.result("OK"));
                   config.routes.get("/", pages::index);
+                  config.routes.post("/jobs", jobs::submit);
+                  config.routes.get("/jobs/{id}/result", jobs::showResult);
                 })
             .start(bind, port);
     int actualPort = app.port();
