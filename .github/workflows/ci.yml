@@ -43,8 +43,10 @@ jobs:
 
   # Linux native build + full smoke (real PDF conversion through CLI and Web)
   # uses Liberica NIK via Docker so AWT/font subsystems work out of the box.
+  # NOTE: job name keeps the legacy `native-image (ubuntu-latest)` so branch
+  # protection's required-status-checks list stays stable across this refactor.
   native-linux:
-    name: native-image (linux, Liberica NIK)
+    name: native-image (ubuntu-latest)
     needs: check
     runs-on: ubuntu-latest
     steps:
