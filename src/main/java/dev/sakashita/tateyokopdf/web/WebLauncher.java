@@ -1,6 +1,8 @@
 package dev.sakashita.tateyokopdf.web;
 
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
+import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
+import dev.sakashita.tateyokopdf.web.lifecycle.SingleInstanceLock;
 import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
 import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
@@ -11,6 +13,7 @@ import io.javalin.Javalin;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -25,9 +28,20 @@ public final class WebLauncher {
   private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
   private static final Duration JOB_TTL = Duration.ofHours(1);
   private static final Duration GC_SWEEP_INTERVAL = Duration.ofMinutes(1);
+  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(60);
+  private static final Duration IDLE_CHECK_INTERVAL = Duration.ofSeconds(10);
   private static final int WORKER_POOL_SIZE = 2;
 
   public void run() {
+    SingleInstanceLock lock = new SingleInstanceLock();
+    Optional<URI> existing = lock.findLiveInstance();
+    if (existing.isPresent()) {
+      URI url = existing.get();
+      log.info("Existing instance detected at {}. Opening browser and exiting.", url);
+      BrowserLauncher.open(url);
+      return;
+    }
+
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
     int port = resolvePort();
 
@@ -47,6 +61,9 @@ public final class WebLauncher {
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
 
+    IdleShutdown idle = new IdleShutdown(IDLE_TIMEOUT, IDLE_CHECK_INTERVAL, () -> System.exit(0));
+    idle.start();
+
     Javalin app =
         Javalin.create(
                 config -> {
@@ -59,9 +76,16 @@ public final class WebLauncher {
                   config.routes.get("/jobs/{id}/result", jobs::showResult);
                   config.routes.get("/jobs/{id}/download", jobs::download);
                   config.routes.ws("/jobs/{id}/ws", ws -> ws.onConnect(jobs::onProgressWs));
+                  config.routes.ws(
+                      "/ws/keepalive",
+                      ws -> {
+                        ws.onConnect(ctx -> idle.onConnect());
+                        ws.onClose(ctx -> idle.onDisconnect());
+                      });
                 })
             .start(bind, port);
     int actualPort = app.port();
+    lock.claim(actualPort);
 
     URI browseTarget = URI.create("http://127.0.0.1:" + actualPort + "/");
     log.info("tate-yoko-pdf web running at {}", browseTarget);
@@ -76,6 +100,7 @@ public final class WebLauncher {
                   try {
                     app.stop();
                   } finally {
+                    idle.stop();
                     gc.stop();
                     workers.shutdownNow();
                     try {
@@ -84,6 +109,7 @@ public final class WebLauncher {
                       Thread.currentThread().interrupt();
                     }
                     registry.drainAll().forEach(job -> WorkDirs.deleteQuietly(job.workDir()));
+                    lock.release();
                     shutdown.countDown();
                   }
                 },

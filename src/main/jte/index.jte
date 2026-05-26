@@ -39,5 +39,6 @@
         <button type="submit">変換する</button>
         <p class="hint">PDFはローカルでのみ処理され、外部に送信されません。</p>
     </form>
+    @template.keepalive()
 </body>
 </html>

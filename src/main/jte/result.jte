@@ -24,5 +24,6 @@
         <a class="download" href="/jobs/${job.id().toString()}/download">PDFをダウンロード</a>
         <a class="secondary" href="/">別のPDFを変換</a>
     </div>
+    @template.keepalive()
 </body>
 </html>

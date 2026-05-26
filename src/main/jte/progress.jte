@@ -47,5 +47,6 @@
             status.classList.add("error");
         };
     </script>
+    @template.keepalive()
 </body>
 </html>

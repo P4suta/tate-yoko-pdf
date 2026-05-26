@@ -16,5 +16,6 @@
     <h1>変換に失敗しました</h1>
     <p class="message">${message}</p>
     <a class="back" href="/">戻ってやり直す</a>
+    @template.keepalive()
 </body>
 </html>
