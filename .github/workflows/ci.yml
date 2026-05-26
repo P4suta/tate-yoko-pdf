@@ -155,6 +155,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
+      # Persist the ~150 MB Liberica NIK install across runs; setup-graalvm
+      # detects the populated tool-cache and skips the download.
+      - name: Cache Liberica NIK install
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.tool_cache }}/bellsoft-liberica-vm-*
+          key: liberica-${{ runner.os }}-${{ runner.arch }}-25
+          restore-keys: |
+            liberica-${{ runner.os }}-${{ runner.arch }}-
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
