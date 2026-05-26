@@ -1,0 +1,14 @@
+[
+  {
+    "name": "net.logstash.logback.encoder.LogstashEncoder",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  },
+  {
+    "name": "net.logstash.logback.fieldnames.LogstashFieldNames",
+    "allDeclaredConstructors": true,
+    "allDeclaredMethods": true,
+    "allDeclaredFields": true
+  }
+]

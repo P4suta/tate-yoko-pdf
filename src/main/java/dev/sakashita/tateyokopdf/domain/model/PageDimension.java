@@ -1,12 +1,13 @@
 package dev.sakashita.tateyokopdf.domain.model;
 
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.Validators;
+
 public record PageDimension(float widthPt, float heightPt) {
 
   public PageDimension {
-    if (widthPt <= 0 || heightPt <= 0) {
-      throw new IllegalArgumentException(
-          "Page dimensions must be positive: width=%f, height=%f".formatted(widthPt, heightPt));
-    }
+    Validators.requirePositive(widthPt, ErrorKind.INVALID_PARAMETER, "widthPt");
+    Validators.requirePositive(heightPt, ErrorKind.INVALID_PARAMETER, "heightPt");
   }
 
   public static PageDimension max(PageDimension a, PageDimension b) {

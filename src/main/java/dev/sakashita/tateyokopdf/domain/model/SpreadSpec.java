@@ -1,11 +1,12 @@
 package dev.sakashita.tateyokopdf.domain.model;
 
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.Validators;
+
 public record SpreadSpec(float widthPt, float heightPt) {
 
   public SpreadSpec {
-    if (widthPt <= 0 || heightPt <= 0) {
-      throw new IllegalArgumentException(
-          "Spread dimensions must be positive: width=%f, height=%f".formatted(widthPt, heightPt));
-    }
+    Validators.requirePositive(widthPt, ErrorKind.INVALID_PARAMETER, "widthPt");
+    Validators.requirePositive(heightPt, ErrorKind.INVALID_PARAMETER, "heightPt");
   }
 }

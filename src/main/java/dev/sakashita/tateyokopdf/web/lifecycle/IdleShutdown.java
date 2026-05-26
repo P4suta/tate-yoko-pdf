@@ -8,6 +8,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,15 +25,26 @@ public final class IdleShutdown {
   private final Duration idleTimeout;
   private final Duration checkInterval;
   private final Runnable shutdownAction;
+  private final Supplier<Instant> nowSupplier;
   private final ScheduledExecutorService scheduler;
   private final AtomicInteger active = new AtomicInteger(0);
-  private final AtomicReference<Instant> lastDisconnect = new AtomicReference<>(Instant.now());
+  private final AtomicReference<Instant> lastDisconnect;
   private @Nullable ScheduledFuture<?> task;
 
   public IdleShutdown(Duration idleTimeout, Duration checkInterval, Runnable shutdownAction) {
+    this(idleTimeout, checkInterval, shutdownAction, Instant::now);
+  }
+
+  public IdleShutdown(
+      Duration idleTimeout,
+      Duration checkInterval,
+      Runnable shutdownAction,
+      Supplier<Instant> nowSupplier) {
     this.idleTimeout = idleTimeout;
     this.checkInterval = checkInterval;
     this.shutdownAction = shutdownAction;
+    this.nowSupplier = nowSupplier;
+    this.lastDisconnect = new AtomicReference<>(nowSupplier.get());
     this.scheduler =
         Executors.newSingleThreadScheduledExecutor(
             r -> {
@@ -62,7 +74,7 @@ public final class IdleShutdown {
 
   public void onDisconnect() {
     int n = active.decrementAndGet();
-    lastDisconnect.set(Instant.now());
+    lastDisconnect.set(nowSupplier.get());
     log.debug("keepalive close ({} active)", n);
   }
 
@@ -71,7 +83,7 @@ public final class IdleShutdown {
       if (active.get() > 0) {
         return;
       }
-      Duration sinceLast = Duration.between(lastDisconnect.get(), Instant.now());
+      Duration sinceLast = Duration.between(lastDisconnect.get(), nowSupplier.get());
       if (sinceLast.compareTo(idleTimeout) >= 0) {
         log.info("No browser keepalive for {}s; initiating idle shutdown", sinceLast.toSeconds());
         shutdownAction.run();

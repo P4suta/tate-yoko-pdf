@@ -1,20 +1,20 @@
 package dev.sakashita.tateyokopdf.domain.model;
 
+import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.port.exception.Validators;
+
 public sealed interface PagePairSpec {
 
   record Pair(int firstIndex, int secondIndex) implements PagePairSpec {
     public Pair {
-      if (firstIndex < 0 || secondIndex < 0) {
-        throw new IllegalArgumentException("Page indices must be non-negative");
-      }
+      Validators.requireNonNegative(firstIndex, ErrorKind.PDF_INVALID_PAGE, "firstIndex");
+      Validators.requireNonNegative(secondIndex, ErrorKind.PDF_INVALID_PAGE, "secondIndex");
     }
   }
 
   record Single(int pageIndex) implements PagePairSpec {
     public Single {
-      if (pageIndex < 0) {
-        throw new IllegalArgumentException("Page index must be non-negative");
-      }
+      Validators.requireNonNegative(pageIndex, ErrorKind.PDF_INVALID_PAGE, "pageIndex");
     }
   }
 }

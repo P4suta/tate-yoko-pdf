@@ -5,6 +5,7 @@ plugins {
     java
     application
     jacoco
+    `java-test-fixtures`
     id("com.gradleup.shadow") version "9.4.1"
     id("org.graalvm.buildtools.native") version "1.1.0"
     id("com.diffplug.spotless") version "8.5.1"
@@ -39,6 +40,9 @@ dependencies {
     implementation("io.javalin:javalin:7.2.2")
     implementation("gg.jte:jte:3.2.4")
     implementation("gg.jte:jte-runtime:3.2.4")
+    jteGenerate("gg.jte:jte-native-resources:3.2.4")
+
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
@@ -49,14 +53,27 @@ dependencies {
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.0")
     testImplementation("org.assertj:assertj-core:3.27.7")
+    testImplementation("io.javalin:javalin-testtools:7.2.2")
+    testImplementation("org.mockito:mockito-core:5.14.2")
+    testImplementation("org.mockito:mockito-junit-jupiter:5.14.2")
+    testImplementation("nl.jqno.equalsverifier:equalsverifier:3.17.5")
+    testImplementation("org.awaitility:awaitility:4.2.2")
+    testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.7")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
+    testFixturesImplementation("org.jspecify:jspecify:1.0.0")
+    testFixturesImplementation("io.javalin:javalin:7.2.2")
+    testFixturesImplementation("gg.jte:jte:3.2.4")
+    testFixturesImplementation("gg.jte:jte-runtime:3.2.4")
 }
 
 jte {
     generate()
     binaryStaticContent = true
     contentType = gg.jte.ContentType.Html
+    jteExtension("gg.jte.nativeimage.NativeResourcesExtension")
 }
 
 spotless {

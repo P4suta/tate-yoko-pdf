@@ -23,8 +23,16 @@ public final class SingleInstanceLock {
   private final Path lockFile;
 
   public SingleInstanceLock() {
+    this(defaultLockFile());
+  }
+
+  public SingleInstanceLock(Path lockFile) {
+    this.lockFile = lockFile;
+  }
+
+  private static Path defaultLockFile() {
     String home = System.getProperty("user.home", ".");
-    this.lockFile = Path.of(home, ".tate-yoko-pdf", "app.lock");
+    return Path.of(home, ".tate-yoko-pdf", "app.lock");
   }
 
   /**
