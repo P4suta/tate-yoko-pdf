@@ -59,7 +59,7 @@ dependencies {
     implementation("gg.jte:jte-runtime:3.2.4")
     jteGenerate("gg.jte:jte-native-resources:3.2.4")
 
-    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
+    implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
