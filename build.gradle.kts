@@ -519,9 +519,8 @@ graalvmNative {
             // Force AWT into headless mode at build time so PDFBox' Raster/ColorModel
             // <clinit> does not try to load X11-only graphics during the image build.
             buildArgs.add("-J-Djava.awt.headless=true")
-            // G1 GC for the generated image — faster build and better runtime GC
-            // for PDF batch workloads than the default SerialGC.
-            buildArgs.add("--gc=G1")
+            // (`--gc=G1` would help here but is Oracle GraalVM EE only — the CE /
+            //  Liberica NIK build we ship rejects it. Leaving the default GC.)
             // Build a binary that runs on any x86-64 / arm64 baseline CPU; without
             // this GraalVM 25 defaults to a higher microarch level and the binary
             // can SIGILL on older hardware end-users may still have.
