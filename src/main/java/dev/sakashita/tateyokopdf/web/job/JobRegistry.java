@@ -17,8 +17,13 @@ public final class JobRegistry {
   private final ConcurrentMap<UUID, WebProgressListener> listeners = new ConcurrentHashMap<>();
 
   public Job register(Path workDir, Path inputPath, Path outputPath, String originalName) {
+    return register(workDir, inputPath, outputPath, originalName, "-");
+  }
+
+  public Job register(
+      Path workDir, Path inputPath, Path outputPath, String originalName, String traceId) {
     UUID id = UUID.randomUUID();
-    Job job = new Job(id, workDir, inputPath, outputPath, originalName, Instant.now());
+    Job job = new Job(id, workDir, inputPath, outputPath, originalName, Instant.now(), traceId);
     jobs.put(id, job);
     listeners.put(id, new WebProgressListener(job));
     return job;
@@ -55,5 +60,19 @@ public final class JobRegistry {
     jobs.clear();
     listeners.clear();
     return all;
+  }
+
+  public int size() {
+    return jobs.size();
+  }
+
+  public boolean hasRunningJobs() {
+    for (Job job : jobs.values()) {
+      JobStatus status = job.status();
+      if (status instanceof JobStatus.Pending || status instanceof JobStatus.Running) {
+        return true;
+      }
+    }
+    return false;
   }
 }

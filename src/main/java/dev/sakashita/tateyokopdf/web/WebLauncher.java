@@ -1,6 +1,9 @@
 package dev.sakashita.tateyokopdf.web;
 
+import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.HealthController;
 import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
+import dev.sakashita.tateyokopdf.observability.ShutdownState;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
@@ -11,6 +14,7 @@ import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
+import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
@@ -21,6 +25,7 @@ import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,16 +67,25 @@ public final class WebLauncher {
             });
 
     PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers);
+    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
     WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
+    HealthController health =
+        new HealthController(new HealthCheck(registry, (ThreadPoolExecutor) workers));
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
 
-    IdleShutdown idle = new IdleShutdown(IDLE_TIMEOUT, IDLE_CHECK_INTERVAL, () -> System.exit(0));
+    IdleShutdown idle =
+        new IdleShutdown(
+            IDLE_TIMEOUT,
+            IDLE_CHECK_INTERVAL,
+            () -> System.exit(0),
+            java.time.Instant::now,
+            registry::hasRunningJobs);
     idle.start();
 
-    Javalin app = buildJavalin(pages, jobs, idle, exHandler, MAX_UPLOAD_BYTES).start(bind, port);
+    Javalin app =
+        buildJavalin(pages, jobs, idle, exHandler, health, MAX_UPLOAD_BYTES).start(bind, port);
     int actualPort = app.port();
     lock.claim(actualPort);
 
@@ -85,6 +99,7 @@ public final class WebLauncher {
             new Thread(
                 () -> {
                   log.info("Shutting down web server");
+                  ShutdownState.beginShutdown();
                   try {
                     app.stop();
                   } finally {
@@ -115,6 +130,7 @@ public final class WebLauncher {
       JobController jobs,
       IdleShutdown idle,
       WebExceptionHandler exHandler,
+      HealthController health,
       long maxUploadBytes) {
     return Javalin.create(
         config -> {
@@ -122,7 +138,9 @@ public final class WebLauncher {
           config.http.maxRequestSize = maxUploadBytes;
           config.routes.before(RequestTracingFilter::before);
           config.routes.after(RequestTracingFilter::after);
-          config.routes.get("/health", ctx -> ctx.result("OK"));
+          config.routes.get("/health", health::health);
+          config.routes.get("/health/live", health::liveness);
+          config.routes.get("/health/ready", health::readiness);
           config.routes.get("/", pages::index);
           config.routes.post("/jobs", jobs::submit);
           config.routes.get("/jobs/{id}/progress", jobs::showProgress);

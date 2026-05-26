@@ -5,7 +5,6 @@ import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.domain.strategy.*;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -44,37 +43,28 @@ public class SpreadCommand implements Callable<Integer> {
       description = "Enable verbose logging output (DEBUG level)")
   private boolean verbose;
 
+  public boolean isVerbose() {
+    return verbose;
+  }
+
   @Override
   public Integer call() {
-    try {
-      Path actualOutput =
-          (output != null) ? output : SpreadOptions.withDefaults(input).outputPath();
+    Path actualOutput = (output != null) ? output : SpreadOptions.withDefaults(input).outputPath();
+    var options = new SpreadOptions(input, actualOutput, direction, coverSingle);
 
-      var options = new SpreadOptions(input, actualOutput, direction, coverSingle);
-
-      if (verbose) {
-        configureVerboseLogging();
-      }
-
-      var factory = new PdfBoxDocumentFactory();
-      var calculator = new SpreadLayoutCalculator();
-      PaginationStrategy strategy =
-          coverSingle ? new CoverSinglePagination() : new StandardPagination();
-      var listener = new ConsoleProgressListener();
-
-      var service = new SpreadService(factory, calculator, strategy, listener);
-      service.execute(options);
-
-      return 0;
-
-    } catch (SpreadException e) {
-      System.err.println("Error: " + e.getMessage());
-      return 1;
-    } catch (Exception e) {
-      System.err.println("Unexpected error: " + e.getMessage());
-      e.printStackTrace(System.err);
-      return 2;
+    if (verbose) {
+      configureVerboseLogging();
     }
+
+    var factory = new PdfBoxDocumentFactory();
+    var calculator = new SpreadLayoutCalculator();
+    PaginationStrategy strategy =
+        coverSingle ? new CoverSinglePagination() : new StandardPagination();
+    var listener = new ConsoleProgressListener();
+
+    var service = new SpreadService(factory, calculator, strategy, listener);
+    service.execute(options);
+    return CliExitCodes.OK;
   }
 
   private static void configureVerboseLogging() {
@@ -86,7 +76,11 @@ public class SpreadCommand implements Callable<Integer> {
   }
 
   public static void runCli(String[] args) {
-    int exitCode = new CommandLine(new SpreadCommand()).execute(args);
+    SpreadCommand command = new SpreadCommand();
+    int exitCode =
+        new CommandLine(command)
+            .setExecutionExceptionHandler(new CliExceptionHandler(command::isVerbose))
+            .execute(args);
     System.exit(exitCode);
   }
 

@@ -1,5 +1,7 @@
 package dev.sakashita.tateyokopdf.testfixtures;
 
+import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.HealthController;
 import dev.sakashita.tateyokopdf.web.WebLauncher;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
@@ -7,6 +9,7 @@ import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.PageController;
 import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
+import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import gg.jte.ContentType;
 import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
@@ -14,6 +17,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
 
 /**
  * Thin builder around {@link WebLauncher#buildJavalin} for tests. Returns a configured but not
@@ -32,18 +36,21 @@ public final class WebTestHarness {
     ViewRenderer renderer = new ViewRenderer(engine);
     JobRegistry registry = new JobRegistry();
     ExecutorService workers =
-        Executors.newSingleThreadExecutor(
+        Executors.newFixedThreadPool(
+            1,
             r -> {
               Thread t = new Thread(r, "tate-yoko-test-worker");
               t.setDaemon(true);
               return t;
             });
     PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers);
+    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
     IdleShutdown idle =
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
     WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
-    return WebLauncher.buildJavalin(pages, jobs, idle, exHandler, uploadBytes);
+    HealthController health =
+        new HealthController(new HealthCheck(registry, (ThreadPoolExecutor) workers));
+    return WebLauncher.buildJavalin(pages, jobs, idle, exHandler, health, uploadBytes);
   }
 
   private static final class Defaults {

@@ -159,11 +159,10 @@ tasks.jacocoTestCoverageVerification {
     )
     violationRules {
         rule {
-            // M3 will lift this once multipart upload happy-path tests land.
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.70".toBigDecimal()
+                minimum = "0.78".toBigDecimal()
             }
         }
         rule {
@@ -209,13 +208,14 @@ tasks.jacocoTestCoverageVerification {
             }
         }
         rule {
-            // M3 will lift this once multipart upload happy-path tests land.
+            // WS pump (`onProgressWs` thread) and download streaming are exercised in M4
+            // end-to-end smoke tests; this baseline guards against regressions in submit/lookup.
             element = "PACKAGE"
             includes = listOf("dev.sakashita.tateyokopdf.web.routes")
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.30".toBigDecimal()
+                minimum = "0.50".toBigDecimal()
             }
         }
         rule {
