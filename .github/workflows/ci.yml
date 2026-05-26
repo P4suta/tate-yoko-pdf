@@ -41,13 +41,76 @@ jobs:
             build/reports/jacoco/test/html
           if-no-files-found: ignore
 
-  native:
+  # Linux native build + full smoke (real PDF conversion through CLI and Web)
+  # uses Liberica NIK via Docker so AWT/font subsystems work out of the box.
+  native-linux:
+    name: native-image (linux, Liberica NIK)
+    needs: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build dev container (Liberica NIK)
+        run: docker compose build dev
+      - name: Native compile via Docker
+        run: docker compose run --rm dev ./gradlew nativeCompile createSamplePdf --no-daemon
+      - name: Native CLI smoke (real PDF conversion)
+        run: |
+          docker compose run --rm dev bash -c '
+            ./build/native/nativeCompile/tate-yoko-pdf \
+              build/test-data/sample.pdf \
+              -o build/test-data/native-out.pdf \
+            && test -s build/test-data/native-out.pdf
+          '
+          file build/test-data/native-out.pdf | grep -q PDF
+      - name: Native Web smoke (upload → download)
+        run: |
+          docker compose --profile web-native up -d web-native
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8080/health/live > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8080/health/live  | grep -F '"status":"UP"'
+          curl -fsS http://127.0.0.1:8080/health/ready | grep -F '"status":"UP"'
+          REDIRECT=$(curl -sS -o /dev/null -w "%{redirect_url}" \
+            -F "pdf=@build/test-data/sample.pdf;type=application/pdf" \
+            http://127.0.0.1:8080/jobs)
+          JOB_ID=$(echo "$REDIRECT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
+          test -n "$JOB_ID"
+          for i in $(seq 1 30); do
+            STATUS=$(curl -sS -L -o /dev/null -w "%{http_code}" \
+              "http://127.0.0.1:8080/jobs/$JOB_ID/result")
+            if [ "$STATUS" = "200" ]; then break; fi
+            sleep 1
+          done
+          curl -fsS -o /tmp/web-out.pdf "http://127.0.0.1:8080/jobs/$JOB_ID/download"
+          file /tmp/web-out.pdf | grep -q PDF
+          # error path: invalid UUID
+          curl -sS -o /tmp/err.html "http://127.0.0.1:8080/jobs/bad/progress"
+          grep -q JOB_NOT_FOUND /tmp/err.html
+      - name: Collect container logs on failure
+        if: failure()
+        run: docker compose logs web-native || true
+      - name: Stop web-native
+        if: always()
+        run: docker compose --profile web-native down web-native || true
+      - name: Upload native binary
+        uses: actions/upload-artifact@v5
+        with:
+          name: tate-yoko-pdf-linux
+          path: |
+            build/native/nativeCompile/tate-yoko-pdf
+            build/native/nativeCompile/*.so
+          if-no-files-found: ignore
+
+  # macOS / Windows builds still use stock GraalVM CE (no full AWT smoke yet).
+  # Liberica NIK setup for these runners is tracked separately; see README.
+  native-other:
     name: native-image (${{ matrix.os }})
     needs: check
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
@@ -59,42 +122,12 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Native compile
         run: ./gradlew nativeCompile --no-daemon
-      - name: Generate sample PDF for smoke test
-        if: matrix.os == 'ubuntu-latest'
-        run: ./gradlew createSamplePdf --no-daemon
-      - name: Native binary smoke test (Web — startup + /health + upload accept)
-        # PDF rendering needs AWT native libs not yet bundled in the runtime image;
-        # tracked separately. Here we verify that the native binary starts, serves
-        # the health endpoints, and accepts a multipart upload (redirect to /progress).
-        if: matrix.os == 'ubuntu-latest'
-        env:
-          TATE_YOKO_NO_BROWSER: "true"
-          TATE_YOKO_PORT: "8080"
-          TATE_YOKO_BIND: "127.0.0.1"
-        run: |
-          ./build/native/nativeCompile/tate-yoko-pdf &
-          PID=$!
-          trap "kill $PID 2>/dev/null || true" EXIT
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/health/live > /dev/null; then break; fi
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:8080/health/live | grep -F '"status":"UP"'
-          curl -fsS http://127.0.0.1:8080/health/ready | grep -F '"status":"UP"'
-          curl -fsS -o /dev/null -w "POST /jobs → HTTP %{http_code}\n" \
-            -F "pdf=@build/test-data/sample.pdf;type=application/pdf" \
-            http://127.0.0.1:8080/jobs
-          # Also verify the error path: invalid UUID renders error.jte and returns 404.
-          curl -sS -o /tmp/err.html -w "GET /jobs/bad/progress → HTTP %{http_code}\n" \
-            http://127.0.0.1:8080/jobs/bad/progress
-          grep -q JOB_NOT_FOUND /tmp/err.html
       - name: Upload native binary
         uses: actions/upload-artifact@v5
         with:
           name: tate-yoko-pdf-${{ matrix.os }}
           path: |
             build/native/nativeCompile/tate-yoko-pdf*
-            build/native/nativeCompile/*.so
             build/native/nativeCompile/*.dll
             build/native/nativeCompile/*.dylib
           if-no-files-found: ignore
