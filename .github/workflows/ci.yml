@@ -138,8 +138,10 @@ jobs:
             build/native/nativeCompile/*.so
           if-no-files-found: ignore
 
-  # macOS / Windows builds still use stock GraalVM CE (no full AWT smoke yet).
-  # Liberica NIK setup for these runners is tracked separately; see README.
+  # macOS / Windows native-image builds use Liberica NIK (same vendor & layout
+  # as the dev container's `bellsoft/liberica-native-image-kit-container`), so
+  # the AWT/font subsystems work without the GraalVM CE workarounds and the
+  # compile is materially faster on macOS (the previous critical-path bottleneck).
   native-other:
     name: native-image (${{ matrix.os }})
     needs: check
@@ -156,7 +158,7 @@ jobs:
       - uses: graalvm/setup-graalvm@v1
         with:
           java-version: '25'
-          distribution: 'graalvm-community'
+          distribution: 'liberica'
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: gradle/actions/setup-gradle@v4
       - name: Native compile
