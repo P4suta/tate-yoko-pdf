@@ -22,6 +22,16 @@ services:
     stdin_open: true
     command: ["bash"]
 
+  # Long-lived dev container — when running, `just check` / `test` / etc. dispatch
+  # via `docker compose exec` instead of `run --rm`, keeping the Gradle daemon warm.
+  # Start with `just dev-up`, stop with `just dev-down`.
+  dev-daemon:
+    extends:
+      service: dev
+    container_name: tate-yoko-pdf-dev-daemon
+    profiles: ["dev"]
+    command: ["tail", "-f", "/dev/null"]
+
   web:
     extends:
       service: dev
