@@ -10,10 +10,16 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# Default to read-only; jobs that publish artifacts opt into `actions: write`.
+permissions:
+  contents: read
+
 jobs:
   typos:
     name: typos
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
       - uses: crate-ci/typos@master
@@ -21,6 +27,9 @@ jobs:
   check:
     name: check (JVM)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write  # upload-artifact
     steps:
       - uses: actions/checkout@v5
       - uses: graalvm/setup-graalvm@v1
@@ -49,6 +58,9 @@ jobs:
     name: native-image (ubuntu-latest)
     needs: check
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: write  # upload-artifact
     # Build the dev container with the runner's UID/GID so the `dev` user
     # inside the container can write into the bind-mounted /workspace
     # (otherwise Gradle fails creating /workspace/.gradle/configuration-cache).
@@ -119,6 +131,9 @@ jobs:
   native-other:
     name: native-image (${{ matrix.os }})
     needs: check
+    permissions:
+      contents: read
+      actions: write  # upload-artifact
     strategy:
       fail-fast: false
       matrix:
