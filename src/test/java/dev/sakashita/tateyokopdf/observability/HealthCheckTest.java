@@ -6,6 +6,7 @@ import dev.sakashita.tateyokopdf.observability.HealthCheck.Check;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Objects;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -37,8 +38,7 @@ final class HealthCheckTest {
     var hc = new HealthCheck(new JobRegistry(), workers, tmp, Long.MAX_VALUE);
     var report = hc.run();
     assertThat(report.status()).isEqualTo(HealthCheck.Status.DOWN);
-    Check diskCheck = report.checks().get("diskFreeBytes");
-    assertThat(diskCheck).isNotNull();
+    Check diskCheck = Objects.requireNonNull(report.checks().get("diskFreeBytes"));
     assertThat(diskCheck.status()).isEqualTo(HealthCheck.Status.DOWN);
   }
 
@@ -47,8 +47,7 @@ final class HealthCheckTest {
     Path file = Files.createFile(tmp.resolve("notadir"));
     var hc = new HealthCheck(new JobRegistry(), workers, file, 1L);
     var report = hc.run();
-    Check workDir = report.checks().get("workDirWritable");
-    assertThat(workDir).isNotNull();
+    Check workDir = Objects.requireNonNull(report.checks().get("workDirWritable"));
     assertThat(workDir.status()).isEqualTo(HealthCheck.Status.DOWN);
     assertThat(report.status()).isEqualTo(HealthCheck.Status.DOWN);
   }
@@ -58,8 +57,7 @@ final class HealthCheckTest {
     workers.shutdown();
     var hc = new HealthCheck(new JobRegistry(), workers, tmp, 1L);
     var report = hc.run();
-    Check exec = report.checks().get("executorHealthy");
-    assertThat(exec).isNotNull();
+    Check exec = Objects.requireNonNull(report.checks().get("executorHealthy"));
     assertThat(exec.status()).isEqualTo(HealthCheck.Status.DOWN);
     assertThat(report.status()).isEqualTo(HealthCheck.Status.DOWN);
   }
@@ -70,8 +68,7 @@ final class HealthCheckTest {
     reg.register(tmp, tmp.resolve("in"), tmp.resolve("out"), "a.pdf");
     var hc = new HealthCheck(reg, workers, tmp, 1L);
     var report = hc.run();
-    Check jobReg = report.checks().get("jobRegistry");
-    assertThat(jobReg).isNotNull();
+    Check jobReg = Objects.requireNonNull(report.checks().get("jobRegistry"));
     assertThat(jobReg.detail()).contains("size=1");
   }
 }

@@ -18,19 +18,24 @@ final class SpreadOptionsTest {
     assertThat(opt.coverSingle()).isTrue();
   }
 
+  // The rejects-null tests deliberately pass null to non-null params to exercise
+  // the runtime guard; suppress NullAway here so the static analyzer doesn't fight us.
   @Test
+  @SuppressWarnings("NullAway")
   void rejectsNullSourcePath() {
     assertThatNullPointerException()
         .isThrownBy(() -> new SpreadOptions(null, Path.of("b.pdf"), ReadingDirection.RTL, false));
   }
 
   @Test
+  @SuppressWarnings("NullAway")
   void rejectsNullOutputPath() {
     assertThatNullPointerException()
         .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), null, ReadingDirection.RTL, false));
   }
 
   @Test
+  @SuppressWarnings("NullAway")
   void rejectsNullDirection() {
     assertThatNullPointerException()
         .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), null, false));

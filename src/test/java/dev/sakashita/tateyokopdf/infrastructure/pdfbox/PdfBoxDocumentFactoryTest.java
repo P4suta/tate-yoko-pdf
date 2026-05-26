@@ -58,15 +58,13 @@ final class PdfBoxDocumentFactoryTest {
   @Test
   void userMessageDoesNotLeakAbsolutePath(@TempDir Path tmp) throws Exception {
     Path encrypted = PdfFixtures.passwordProtected(tmp, "secrets.pdf", "x");
-    SpreadException ex = null;
-    try {
-      factory.openSource(encrypted);
-    } catch (SpreadException caught) {
-      ex = caught;
-    }
-    assertThat(ex).isNotNull();
-    assertThat(ex.userMessage()).doesNotContain(tmp.toString());
-    assertThat(ex.technicalDetail()).contains("path=");
+    assertThatThrownBy(() -> factory.openSource(encrypted))
+        .isInstanceOfSatisfying(
+            SpreadException.class,
+            ex -> {
+              assertThat(ex.userMessage()).doesNotContain(tmp.toString());
+              assertThat(ex.technicalDetail()).contains("path=");
+            });
   }
 
   @Test
