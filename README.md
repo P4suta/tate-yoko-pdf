@@ -280,7 +280,7 @@ disk threshold は env `TATE_YOKO_HEALTH_MIN_FREE_MB` で上書き可能 (デフ
 PDFBox の内部実装は `java.awt.image.Raster` を経由してフォントとカラーマネジメントを扱うため、native-image には AWT/Swing 対応が必要です。本プロジェクトは [Liberica NIK Full](https://hub.docker.com/r/bellsoft/liberica-native-image-kit-container) (BellSoft の GraalVM 派生で AWT サポート強化版) を Docker 経由でビルドに使用し、runtime image には `fontconfig` / `libfreetype6` をバンドルしています (`Dockerfile`)。`just native` / `just web-native` でビルド・起動できます。
 
 - **Linux**: Liberica NIK で実 PDF 変換まで動作 (CI で smoke 済)
-- **macOS / Windows**: ネイティブバイナリは stock GraalVM CE でビルドされており、AWT 制約のため実 PDF 変換は未対応。当面は `shadowJar` (JVM mode) 推奨
+- **macOS / Windows**: CI も Liberica NIK でビルド (`graalvm/setup-graalvm@v1` の `distribution: 'liberica'`)。AWT が同梱されるため理論上は実 PDF 変換可だが、3 OS 揃った smoke は今後の段階で追加予定。
 
 ---
 
