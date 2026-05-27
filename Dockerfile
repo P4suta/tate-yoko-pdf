@@ -12,6 +12,7 @@ RUN apt-get update \
       bash findutils tar gzip git unzip procps curl ca-certificates gnupg \
       fontconfig libfreetype6 fonts-dejavu \
       binutils \
+      qpdf \
  && curl -fsSL https://download.bell-sw.com/pki/GPG-KEY-bellsoft \
       | gpg --dearmor -o /usr/share/keyrings/bellsoft.gpg \
  && echo "deb [signed-by=/usr/share/keyrings/bellsoft.gpg] https://apt.bell-sw.com/ stable main" \

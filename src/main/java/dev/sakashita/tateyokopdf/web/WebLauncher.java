@@ -1,6 +1,7 @@
 package dev.sakashita.tateyokopdf.web;
 
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.infrastructure.qpdf.QpdfLinearizer;
 import dev.sakashita.tateyokopdf.observability.HealthCheck;
 import dev.sakashita.tateyokopdf.observability.SafeExecutor;
 import dev.sakashita.tateyokopdf.observability.ShutdownState;
@@ -74,7 +75,8 @@ public final class WebLauncher {
             new UploadValidator(),
             new JobFactory(registry),
             new DownloadHandler(registry),
-            new SafeExecutor());
+            new SafeExecutor(),
+            QpdfLinearizer.create());
     WebExceptionHandler exHandler = new WebExceptionHandler();
     ShutdownState shutdownState = new ShutdownState();
     HealthController health =

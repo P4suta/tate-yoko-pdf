@@ -4,6 +4,7 @@ import dev.sakashita.tateyokopdf.application.*;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
+import dev.sakashita.tateyokopdf.infrastructure.qpdf.QpdfLinearizer;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
 import picocli.CommandLine;
@@ -57,9 +58,10 @@ public class SpreadCommand implements Callable<Integer> {
 
     var factory = new PdfBoxDocumentFactory();
     var calculator = new SpreadLayoutCalculator();
+    var postProcessor = QpdfLinearizer.create();
     var listener = new ConsoleProgressListener();
 
-    var service = new SpreadService(factory, calculator, listener);
+    var service = new SpreadService(factory, calculator, postProcessor, listener);
     service.execute(options);
     return CliExitCodes.OK;
   }

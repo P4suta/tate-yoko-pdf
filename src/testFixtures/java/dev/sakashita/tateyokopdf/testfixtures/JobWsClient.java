@@ -28,26 +28,33 @@ public final class JobWsClient implements AutoCloseable {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  private final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
-  private final AtomicInteger closeStatus = new AtomicInteger(-1);
+  private final BlockingQueue<String> messages;
+  private final AtomicInteger closeStatus;
   private final HttpClient http;
   private final WebSocket ws;
 
-  private JobWsClient(HttpClient http, WebSocket ws) {
+  private JobWsClient(
+      HttpClient http, WebSocket ws, BlockingQueue<String> messages, AtomicInteger closeStatus) {
     this.http = http;
     this.ws = ws;
+    this.messages = messages;
+    this.closeStatus = closeStatus;
   }
 
   public static JobWsClient connect(int port, UUID jobId) {
     HttpClient http = HttpClient.newHttpClient();
-    var sink = new Sink();
+    // The queue and close-status holders are created up-front so the Sink can be bound to
+    // them *before* the WebSocket open handshake completes. Otherwise an early Started frame
+    // may arrive via Sink.onText before `bindTo(client)` runs, and the message is silently
+    // dropped — surfacing later as a hung second-WS-client test under load.
+    var messages = new LinkedBlockingQueue<String>();
+    var closeStatus = new AtomicInteger(-1);
+    var sink = new Sink(messages, closeStatus);
     WebSocket ws =
         http.newWebSocketBuilder()
             .buildAsync(URI.create("ws://localhost:" + port + "/ws/jobs/" + jobId), sink)
             .join();
-    JobWsClient client = new JobWsClient(http, ws);
-    sink.bindTo(client);
-    return client;
+    return new JobWsClient(http, ws, messages, closeStatus);
   }
 
   /** Pop the next text frame (parsed as a {@link ProgressEvent}) within the timeout, or null. */
@@ -91,14 +98,16 @@ public final class JobWsClient implements AutoCloseable {
     http.close();
   }
 
-  /** Listener captured separately so it can hold a reference to the enclosing client. */
+  /** Listener with direct references to the message queue and close-status slot. */
   private static final class Sink implements WebSocket.Listener {
 
-    private @Nullable JobWsClient client;
+    private final BlockingQueue<String> messages;
+    private final AtomicInteger closeStatus;
     private final StringBuilder buffer = new StringBuilder();
 
-    void bindTo(JobWsClient client) {
-      this.client = client;
+    Sink(BlockingQueue<String> messages, AtomicInteger closeStatus) {
+      this.messages = messages;
+      this.closeStatus = closeStatus;
     }
 
     @Override
@@ -110,9 +119,7 @@ public final class JobWsClient implements AutoCloseable {
     public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
       buffer.append(data);
       if (last) {
-        if (client != null) {
-          client.messages.offer(buffer.toString());
-        }
+        messages.offer(buffer.toString());
         buffer.setLength(0);
       }
       webSocket.request(1);
@@ -121,9 +128,7 @@ public final class JobWsClient implements AutoCloseable {
 
     @Override
     public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
-      if (client != null) {
-        client.closeStatus.set(statusCode);
-      }
+      closeStatus.set(statusCode);
       return java.util.concurrent.CompletableFuture.completedStage(null);
     }
   }
