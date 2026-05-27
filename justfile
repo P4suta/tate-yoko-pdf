@@ -108,11 +108,14 @@ check-strict: && lint
 test:
     @just gradle test
 
-# Frontend Biome lint + svelte-check (verify only — auto-fixes live in `format`).
+# Frontend Biome lint + svelte-check + Vitest unit tests (verify only —
+# auto-fixes live in `format`). `test:unit -- --run` is the one-shot CI form;
+# the default `test:unit` would otherwise drop into Vitest's watch UI.
 [group('quality')]
 lint:
     @just pnpm run biome:check
     @just pnpm run check
+    @just pnpm run test:unit -- --run
 
 # Regenerate frontend/src/lib/types.ts from the sealed ProgressEvent.
 [group('quality')]
