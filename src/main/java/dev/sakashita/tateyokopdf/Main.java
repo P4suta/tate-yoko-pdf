@@ -11,7 +11,7 @@ public final class Main {
 
   public static void main(String[] args) {
     configureLogging(System.getenv("TATE_YOKO_LOG_FORMAT"));
-    FatalUncaughtHandler.install();
+    Thread.setDefaultUncaughtExceptionHandler(new FatalUncaughtHandler());
     if (args.length == 0) {
       new WebLauncher().run();
       return;
