@@ -161,10 +161,17 @@ frontend-dev:
 
 # ─── Maintenance ─────────────────────────────────────────────────────────────
 
-# Report outdated deps (Gradle + Dockerfile/spotless/jacoco/security pins).
+# Whole-project outdated report: Gradle deps/plugins + Dockerfile pins +
+# security-patch floors + GitHub Actions (via checkExtraVersions) and frontend
+# pnpm caret-cross drift. Pre-push gate (`-PfailOnUpdates=true`) counts the
+# Gradle/Actions side toward the strict total; frontend drift is informational
+# here and bumped on demand via `pnpm update --latest`.
 [group('maint')]
 outdated:
     @just gradle --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
+    @echo
+    @echo "=== Frontend (pnpm outdated) ==="
+    @just pnpm outdated || true
 
 # Remove this project's Docker artifacts (containers, networks, volumes, images). Confirmed prompt.
 [group('maint'), confirm("Remove tate-yoko-pdf's containers / volumes / images? [y/N]")]

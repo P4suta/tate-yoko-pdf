@@ -1,10 +1,11 @@
-# Debian bookworm slim + Liberica JDK 25 Full Edition (from BellSoft's apt repo).
-# We need the **Full** flavour because it ships the `jmods/` directory, which
-# jlink/jpackage consume to assemble the bundled JRE for the app-image
-# distribution. The default `liberica-openjdk-debian:25` Docker image is Lite
-# (no jmods) and therefore unsuitable as a build base for jpackage. Node.js
-# (NodeSource LTS 22) drives the SvelteKit frontend build.
-FROM debian:bookworm-slim AS dev
+# Debian trixie slim (Debian 13, stable since 2025-08) + Liberica JDK 25 Full
+# Edition (from BellSoft's apt repo). We need the **Full** flavour because it
+# ships the `jmods/` directory, which jlink/jpackage consume to assemble the
+# bundled JRE for the app-image distribution. The default
+# `liberica-openjdk-debian:25` Docker image is Lite (no jmods) and therefore
+# unsuitable as a build base for jpackage. Node.js (NodeSource LTS 24, Active
+# LTS since 2025-10) drives the SvelteKit frontend build.
+FROM debian:trixie-slim AS dev
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
@@ -17,7 +18,7 @@ RUN apt-get update \
       > /etc/apt/sources.list.d/bellsoft.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends bellsoft-java25-full \
- && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
  && apt-get install -y --no-install-recommends nodejs \
  && corepack enable \
  && rm -rf /var/lib/apt/lists/*

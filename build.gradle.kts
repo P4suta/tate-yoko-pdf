@@ -41,8 +41,8 @@ java {
     toolchain {
         languageVersion = JavaLanguageVersion.of(25)
     }
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
 }
 
 application {
@@ -99,7 +99,7 @@ spotless {
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.release = 21
+    options.release = 25
     options.errorprone {
         disableWarningsInGeneratedCode = true
         excludedPaths = ".*/build/generated/.*"
@@ -497,6 +497,83 @@ tasks.register("checkExtraVersions") {
         for ((label, g, a) in securityPins) {
             val current = extractFromBuild(""""${Regex.escape("$g:$a")}"\s+to\s+"([^"]+)"""")
             report(label, current, latestMaven(g, a))
+        }
+
+        // --- GitHub Actions (.github/workflows/*) -----------------------------
+        // The `uses: <repo>@<ref>` lines drift independently of Gradle deps and
+        // were historically a blind spot (the project tracked Dockerfile pins
+        // but not Actions). Scan each workflow file, dedupe `<owner>/<repo>`
+        // references, and compare the major version against the latest release
+        // tag. Branch pins (`@master`, `@main`) are reported informationally.
+        println("--- GitHub Actions ---")
+        val workflowFiles =
+            rootProject
+                .fileTree(".github/workflows") {
+                    include("*.yml", "*.yaml")
+                }.files
+        val actionUses = mutableMapOf<String, String>()
+        val branchPins = mutableSetOf<String>()
+        for (yml in workflowFiles) {
+            Regex("""uses:\s*([\w./-]+)@(\S+)""")
+                .findAll(yml.readText())
+                .forEach { m ->
+                    val ref = m.groupValues[1]
+                    val ver = m.groupValues[2]
+                    if (ver == "master" || ver == "main") {
+                        branchPins.add(ref)
+                    } else {
+                        actionUses[ref] = ver
+                    }
+                }
+        }
+
+        fun majorOf(v: String): Int =
+            v
+                .removePrefix("v")
+                .split(".")
+                .firstOrNull()
+                ?.toIntOrNull() ?: 0
+
+        for ((ref, currentVer) in actionUses.toSortedMap()) {
+            // Action repo = first two path segments (handles subpath actions
+            // like `gradle/actions/setup-gradle` where the release tag lives
+            // on the parent `gradle/actions` repo).
+            val parts = ref.split("/")
+            val repo = if (parts.size >= 2) "${parts[0]}/${parts[1]}" else ref
+            val latestTag =
+                fetch("https://api.github.com/repos/$repo/releases/latest")
+                    ?.let {
+                        Regex("\"tag_name\"\\s*:\\s*\"([^\"]+)\"")
+                            .find(it)
+                            ?.groupValues
+                            ?.get(1)
+                    }
+            val currentMajor = majorOf(currentVer)
+            val latestMajor = latestTag?.let { majorOf(it) }
+            val tag =
+                when {
+                    latestTag == null -> {
+                        "ERR "
+                    }
+
+                    latestMajor == currentMajor -> {
+                        "OK  "
+                    }
+
+                    latestMajor!! > currentMajor -> {
+                        updates++
+                        "UPD "
+                    }
+
+                    else -> {
+                        headCount++
+                        "HEAD"
+                    }
+                }
+            println("[%s] %-36s current=%-12s latest=%s".format(tag, ref, currentVer, latestTag ?: "(fetch failed)"))
+        }
+        for (ref in branchPins.toSortedSet()) {
+            println("[INFO] %-36s pinned to branch (not version-tracked)".format(ref))
         }
 
         val unknownDockerArgs =
