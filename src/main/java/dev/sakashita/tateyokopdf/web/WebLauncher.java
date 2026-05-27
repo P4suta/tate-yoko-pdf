@@ -40,8 +40,13 @@ public final class WebLauncher {
   private static final long MAX_UPLOAD_BYTES = 500L * 1024 * 1024;
   private static final Duration JOB_TTL = Duration.ofHours(1);
   private static final Duration GC_SWEEP_INTERVAL = Duration.ofMinutes(1);
-  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(60);
-  private static final Duration IDLE_CHECK_INTERVAL = Duration.ofSeconds(10);
+  // Aggressive idle shutdown: the SvelteKit layout's `beforeunload` handler
+  // explicitly closes /ws/keepalive when the tab dies, so the server only
+  // needs a short grace window for the close frame to land + a quick polling
+  // interval so it acts on the disconnect promptly. Tab close → server exit
+  // ≈ 6 s, down from ≈ 70 s with the previous 60 s / 10 s defaults.
+  private static final Duration IDLE_TIMEOUT = Duration.ofSeconds(5);
+  private static final Duration IDLE_CHECK_INTERVAL = Duration.ofSeconds(1);
   private static final int WORKER_POOL_SIZE = 2;
 
   public void run() {

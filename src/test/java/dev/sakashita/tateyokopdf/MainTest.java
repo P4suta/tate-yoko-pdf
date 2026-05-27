@@ -2,47 +2,79 @@ package dev.sakashita.tateyokopdf;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.AfterEach;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+import org.jspecify.annotations.Nullable;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
-import org.junit.jupiter.api.parallel.Resources;
+import org.junit.jupiter.api.io.TempDir;
 
-@ResourceLock(value = Resources.SYSTEM_PROPERTIES, mode = ResourceAccessMode.READ_WRITE)
 final class MainTest {
 
-  @AfterEach
-  void cleanup() {
-    System.clearProperty("logback.configurationFile");
+  private static class Stub {
+    final Map<String, String> sys = new HashMap<>();
+    final Map<String, String> env = new HashMap<>();
+
+    Stub set(String osName, String userHome) {
+      sys.put("os.name", osName);
+      sys.put("user.home", userHome);
+      sys.put("java.io.tmpdir", userHome + "/tmp");
+      return this;
+    }
+
+    Path resolve() {
+      java.util.function.Function<String, @Nullable String> s = sys::get;
+      java.util.function.Function<String, @Nullable String> e = env::get;
+      return Main.resolveLogDir(s, e);
+    }
   }
 
   @Test
-  void nullFormatLeavesLogbackConfigUntouched() {
-    Main.configureLogging(null);
-    assertThat(System.getProperty("logback.configurationFile")).isNull();
+  void linuxUsesXdgDataHomeWhenSet(@TempDir Path home) {
+    var stub = new Stub().set("Linux", home.toString());
+    stub.env.put("XDG_DATA_HOME", home.resolve("custom-xdg").toString());
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve("custom-xdg/tate-yoko-pdf"));
+    assertThat(resolved).exists().isDirectory();
   }
 
   @Test
-  void emptyFormatLeavesLogbackConfigUntouched() {
-    Main.configureLogging("");
-    assertThat(System.getProperty("logback.configurationFile")).isNull();
+  void linuxFallsBackToDotLocalShareWhenXdgUnset(@TempDir Path home) {
+    var stub = new Stub().set("Linux", home.toString());
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve(".local/share/tate-yoko-pdf"));
+    assertThat(resolved).exists().isDirectory();
   }
 
   @Test
-  void jsonFormatSetsLogbackJsonConfig() {
-    Main.configureLogging("json");
-    assertThat(System.getProperty("logback.configurationFile")).isEqualTo("logback-json.xml");
+  void linuxIgnoresBlankXdg(@TempDir Path home) {
+    var stub = new Stub().set("Linux", home.toString());
+    stub.env.put("XDG_DATA_HOME", "   ");
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve(".local/share/tate-yoko-pdf"));
   }
 
   @Test
-  void jsonFormatIsCaseInsensitive() {
-    Main.configureLogging("JSON");
-    assertThat(System.getProperty("logback.configurationFile")).isEqualTo("logback-json.xml");
+  void macUsesLibraryLogs(@TempDir Path home) {
+    var stub = new Stub().set("Mac OS X", home.toString());
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve("Library/Logs/tate-yoko-pdf"));
+    assertThat(resolved).exists().isDirectory();
   }
 
   @Test
-  void unknownFormatLeavesLogbackConfigUntouched() {
-    Main.configureLogging("syslog");
-    assertThat(System.getProperty("logback.configurationFile")).isNull();
+  void windowsUsesAppdataWhenSet(@TempDir Path home) {
+    var stub = new Stub().set("Windows 11", home.toString());
+    stub.env.put("APPDATA", home.resolve("Roaming").toString());
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve("Roaming/tate-yoko-pdf/logs"));
+    assertThat(resolved).exists().isDirectory();
+  }
+
+  @Test
+  void windowsFallsBackToAppDataRoamingWhenEnvUnset(@TempDir Path home) {
+    var stub = new Stub().set("Windows 10", home.toString());
+    Path resolved = stub.resolve();
+    assertThat(resolved).isEqualTo(home.resolve("AppData/Roaming/tate-yoko-pdf/logs"));
   }
 }
