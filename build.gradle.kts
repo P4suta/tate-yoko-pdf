@@ -32,6 +32,23 @@ plugins {
     id("com.github.spotbugs") version "6.0.27"
     id("com.github.ben-manes.versions") version "0.54.0"
     id("com.github.node-gradle.node") version "7.1.0"
+    id("org.openrewrite.rewrite") version "7.13.0"
+}
+
+rewrite {
+    // Demonstrator recipes — low-risk, deterministic, complementary to Spotless and Error Prone.
+    // Run `just rewrite-check` to preview, `just rewrite` to apply.
+    activeRecipe(
+        "org.openrewrite.staticanalysis.UnnecessaryThrows",
+        "org.openrewrite.staticanalysis.UseDiamondOperator",
+        "org.openrewrite.staticanalysis.LambdaBlockToExpression",
+    )
+    // Dry-run reports diffs without failing CI; the harness is a tool, not a gate.
+    failOnDryRunResults = false
+}
+
+dependencies {
+    rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.16.0")
 }
 
 group = "dev.sakashita"

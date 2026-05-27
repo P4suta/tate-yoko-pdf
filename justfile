@@ -117,6 +117,18 @@ typos-fix:
 typos:
     @just dev-run typos
 
+# Dry-run OpenRewrite — preview rewrite proposals without modifying sources.
+# OpenRewrite reads Task.project at execution which is incompatible with the
+# Gradle 9 configuration cache (same flag the ben-manes versions task needs).
+[group('quality')]
+rewrite-check:
+    @just gradle rewriteDryRun --no-configuration-cache
+
+# Apply OpenRewrite recipes in-place.
+[group('quality')]
+rewrite:
+    @just gradle rewriteRun --no-configuration-cache
+
 # ─── Build & distribution ────────────────────────────────────────────────────
 
 # Build the fat shadowJar at build/libs/tate-yoko-pdf-all.jar.
