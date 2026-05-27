@@ -43,18 +43,21 @@ public final class JobController {
   private final UploadValidator uploadValidator;
   private final JobFactory jobFactory;
   private final DownloadHandler downloadHandler;
+  private final SafeExecutor safeExecutor;
 
   public JobController(
       JobRegistry registry,
       ExecutorService executor,
       UploadValidator uploadValidator,
       JobFactory jobFactory,
-      DownloadHandler downloadHandler) {
+      DownloadHandler downloadHandler,
+      SafeExecutor safeExecutor) {
     this.registry = registry;
     this.executor = executor;
     this.uploadValidator = uploadValidator;
     this.jobFactory = jobFactory;
     this.downloadHandler = downloadHandler;
+    this.safeExecutor = safeExecutor;
   }
 
   public void submit(Context ctx) {
@@ -82,7 +85,7 @@ public final class JobController {
     // Fire-and-forget: the worker reports outcomes through `listener`; the
     // Future returned by submit() is intentionally discarded.
     executor.execute(
-        SafeExecutor.guarded(() -> service.execute(options), listener::fail, "job=" + job.id()));
+        safeExecutor.guarded(() -> service.execute(options), listener::fail, "job=" + job.id()));
 
     ctx.status(202);
     ctx.contentType("application/json");

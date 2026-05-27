@@ -9,24 +9,30 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Opens a URI in the host's default browser, with both the env-flag lookup and the {@link
+ * ProcessBuilder} factory injectable so tests can drive the OS-detection branches without mutating
+ * JVM-global state.
+ */
 public final class BrowserLauncher {
 
   private static final Logger log = LoggerFactory.getLogger(BrowserLauncher.class);
 
-  /**
-   * Test seam: replace to intercept process launching. Default constructs a real {@link
-   * ProcessBuilder} via {@link #defaultProcessBuilderFactory}.
-   */
-  static volatile Function<List<String>, ProcessBuilder> processBuilderFactory =
-      defaultProcessBuilderFactory();
+  private final Supplier<String> noBrowserEnvSupplier;
+  private final Function<List<String>, ProcessBuilder> processBuilderFactory;
 
-  /** Test seam: replace to override the {@code TATE_YOKO_NO_BROWSER} env lookup. */
-  static volatile Supplier<String> noBrowserEnvSupplier =
-      () -> System.getenv("TATE_YOKO_NO_BROWSER");
+  public BrowserLauncher() {
+    this(() -> System.getenv("TATE_YOKO_NO_BROWSER"), ProcessBuilder::new);
+  }
 
-  private BrowserLauncher() {}
+  public BrowserLauncher(
+      Supplier<String> noBrowserEnvSupplier,
+      Function<List<String>, ProcessBuilder> processBuilderFactory) {
+    this.noBrowserEnvSupplier = noBrowserEnvSupplier;
+    this.processBuilderFactory = processBuilderFactory;
+  }
 
-  public static void open(URI uri) {
+  public void open(URI uri) {
     String envValue = Objects.requireNonNullElse(noBrowserEnvSupplier.get(), "false");
     if (Boolean.parseBoolean(envValue)) {
       log.info("TATE_YOKO_NO_BROWSER=true → skipping browser launch. Open manually: {}", uri);
@@ -49,9 +55,5 @@ public final class BrowserLauncher {
     } catch (Exception e) {
       log.warn("Failed to launch browser ({}). Open manually: {}", e.getMessage(), uri);
     }
-  }
-
-  static Function<List<String>, ProcessBuilder> defaultProcessBuilderFactory() {
-    return ProcessBuilder::new;
   }
 }

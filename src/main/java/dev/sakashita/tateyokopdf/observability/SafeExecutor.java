@@ -3,25 +3,32 @@ package dev.sakashita.tateyokopdf.observability;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import java.util.function.Consumer;
+import java.util.function.IntConsumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Wraps a {@link Runnable} so that any {@link Throwable} — including {@link OutOfMemoryError} — is
  * routed through the supplied {@code failureSink} (e.g. {@code WebProgressListener::fail}) and
- * never escapes silently. OOM additionally aborts the JVM with code 137 so the desktop instance can
- * be restarted rather than continue in an undefined state.
+ * never escapes silently. OOM additionally aborts the JVM via the injected {@code exit} consumer
+ * (137 in production, capturable in tests) so the desktop instance can be restarted rather than
+ * continue in an undefined state.
  */
 public final class SafeExecutor {
 
   private static final Logger log = LoggerFactory.getLogger(SafeExecutor.class);
 
-  /** Hook for tests; defaults to System.exit. */
-  static volatile Consumer<Integer> exitHook = code -> System.exit(code);
+  private final IntConsumer exit;
 
-  private SafeExecutor() {}
+  public SafeExecutor() {
+    this(System::exit);
+  }
 
-  public static Runnable guarded(
+  public SafeExecutor(IntConsumer exit) {
+    this.exit = exit;
+  }
+
+  public Runnable guarded(
       Runnable body, Consumer<SpreadException> failureSink, String contextLabel) {
     return () -> {
       try {
@@ -40,7 +47,7 @@ public final class SafeExecutor {
         } catch (Throwable suppress) {
           log.error("[{}] failureSink also failed during OOM handling", contextLabel, suppress);
         }
-        exitHook.accept(137);
+        exit.accept(137);
       } catch (Throwable t) {
         log.error("[{}] fatal Throwable in guarded task", contextLabel, t);
         try {

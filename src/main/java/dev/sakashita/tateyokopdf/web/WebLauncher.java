@@ -2,6 +2,7 @@ package dev.sakashita.tateyokopdf.web;
 
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.SafeExecutor;
 import dev.sakashita.tateyokopdf.observability.ShutdownState;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
@@ -43,12 +44,13 @@ public final class WebLauncher {
   private static final int WORKER_POOL_SIZE = 2;
 
   public void run() {
+    BrowserLauncher browser = new BrowserLauncher();
     SingleInstanceLock lock = new SingleInstanceLock();
     Optional<URI> existing = lock.findLiveInstance();
     if (existing.isPresent()) {
       URI url = existing.get();
       log.info("Existing instance detected at {}. Opening browser and exiting.", url);
-      BrowserLauncher.open(url);
+      browser.open(url);
       return;
     }
 
@@ -71,7 +73,8 @@ public final class WebLauncher {
             workers,
             new UploadValidator(),
             new JobFactory(registry),
-            new DownloadHandler(registry));
+            new DownloadHandler(registry),
+            new SafeExecutor());
     WebExceptionHandler exHandler = new WebExceptionHandler();
     ShutdownState shutdownState = new ShutdownState();
     HealthController health =
@@ -96,7 +99,7 @@ public final class WebLauncher {
 
     URI browseTarget = URI.create("http://127.0.0.1:" + actualPort + "/");
     log.info("tate-yoko-pdf web running at {}", browseTarget);
-    BrowserLauncher.open(browseTarget);
+    browser.open(browseTarget);
 
     var shutdown = new CountDownLatch(1);
     Runtime.getRuntime()
