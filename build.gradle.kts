@@ -361,16 +361,32 @@ tasks.register("checkExtraVersions") {
                     .firstOrNull { it != 0 } ?: 0
             }
 
-        fun fetch(url: String): String? =
-            runCatching {
-                (URI(url).toURL().openConnection() as HttpURLConnection).run {
-                    connectTimeout = 10_000
-                    readTimeout = 10_000
-                    setRequestProperty("User-Agent", "tate-yoko-pdf-checkExtraVersions")
-                    setRequestProperty("Accept", "application/json")
-                    inputStream.use { it.bufferedReader().readText() }
-                }
-            }.getOrNull()
+        // search.maven.org is rate-limited and flaky enough that single-shot
+        // requests routinely return 5xx; retry up to 3× with linear backoff so
+        // a single transient blip doesn't surface as an `[ERR ] fetch failed`
+        // in the report. GitHub's API is more reliable but reuses the same
+        // wrapper for consistency.
+        fun fetch(url: String): String? {
+            repeat(3) { attempt ->
+                val result =
+                    runCatching {
+                        (URI(url).toURL().openConnection() as HttpURLConnection).run {
+                            connectTimeout = 10_000
+                            readTimeout = 10_000
+                            setRequestProperty("User-Agent", "tate-yoko-pdf-checkExtraVersions")
+                            setRequestProperty("Accept", "application/json")
+                            if (responseCode in 200..299) {
+                                inputStream.use { it.bufferedReader().readText() }
+                            } else {
+                                null
+                            }
+                        }
+                    }.getOrNull()
+                if (result != null) return result
+                if (attempt < 2) Thread.sleep(500L * (attempt + 1))
+            }
+            return null
+        }
 
         fun latestGitHub(repo: String): String? {
             val body = fetch("https://api.github.com/repos/$repo/releases/latest") ?: return null
@@ -460,9 +476,14 @@ tasks.register("checkExtraVersions") {
             extractFromBuild("""googleJavaFormat\("([^"]+)"\)"""),
             latestGitHub("google/google-java-format"),
         )
+        // Scope the regex to the jacoco { ... } block — a bare `toolVersion =`
+        // matcher also catches spotbugs' toolVersion and reports them as one
+        // conflicted entry. SpotBugs' toolVersion is *not* tracked here: it
+        // needs to stay ahead of Maven Central's indexer to support Java 25
+        // bytecode scanning, and ben-manes already covers the plugin version.
         report(
             "jacoco",
-            extractFromBuild("""toolVersion = "([^"]+)""""),
+            extractFromBuild("""jacoco\s*\{[^}]*toolVersion\s*=\s*"([^"]+)""""),
             latestMaven("org.jacoco", "jacoco"),
         )
 
