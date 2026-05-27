@@ -3,6 +3,8 @@ import net.ltgt.gradle.errorprone.CheckSeverity
 import net.ltgt.gradle.errorprone.errorprone
 import java.net.HttpURLConnection
 import java.net.URI
+import java.nio.file.Files
+import javax.inject.Inject
 
 // Apply security patches to the buildscript (plugin) classpath so Dependabot
 // alerts on transitive deps like plexus-utils / log4j-core / jackson-core
@@ -103,9 +105,40 @@ application {
 
 repositories {
     mavenCentral()
+    // qpdf official GitHub releases — Ivy URL repository for fetching the
+    // Fast Web View post-processor binary as a regular Gradle dependency.
+    // Bundled into the jpackage app-image by `stageQpdf` below.
+    ivy {
+        name = "qpdf-releases"
+        url = uri("https://github.com/qpdf/qpdf/releases/download/")
+        patternLayout {
+            artifact("v[revision]/qpdf-[revision]-[classifier].[ext]")
+        }
+        metadataSources { artifact() }
+        content { includeGroup("com.github.qpdf") }
+    }
 }
 
+val qpdfVersion = "12.3.2"
+
+// Per-host classifier: jpackage only emits images for the host OS, so we only
+// need the artifact matching the build machine. macOS is intentionally absent
+// — upstream qpdf has no Darwin binary, so the noOp fallback in QpdfLinearizer
+// kicks in (or the user installs via Homebrew and we resolve from PATH).
+val qpdfBinary by configurations.creating { isCanBeConsumed = false }
+
 dependencies {
+    val hostOs =
+        org.gradle.internal.os.OperatingSystem
+            .current()
+    val qpdfCoords: String? =
+        when {
+            hostOs.isLinux -> "com.github.qpdf:qpdf:$qpdfVersion:bin-linux-x86_64@zip"
+            hostOs.isWindows -> "com.github.qpdf:qpdf:$qpdfVersion:mingw64@zip"
+            else -> null
+        }
+    qpdfCoords?.let { qpdfBinary(it) }
+
     implementation("org.apache.pdfbox:pdfbox:3.0.7")
     implementation("info.picocli:picocli:4.7.7")
     implementation("ch.qos.logback:logback-classic:1.5.32")
@@ -842,13 +875,95 @@ val jreImageDir = jreOutputParent.map { it.dir("runtime") }
 val jpackageOutputParent = layout.buildDirectory.dir("dist-jpackage")
 val jpackageInputDir = layout.buildDirectory.dir("jpackage-input")
 
+// Single configuration-cache-safe task that stages the shadow jar + qpdf zip
+// (Linux/Windows hosts only) into jpackage-input/. Using a custom task with
+// injected ArchiveOperations + FileSystemOperations because Gradle 9's
+// configuration cache forbids `zipTree(...)` inside closures that capture the
+// script object.
+//
+// Layout after sync:
+//   jpackage-input/
+//     tate-yoko-pdf-<ver>-all.jar       (shadow jar)
+//     bin/qpdf[.exe] + helpers          (from upstream qpdf release zip)
+//     bin/*.dll                         (Windows mingw64 only)
+//     lib/libqpdf.so.30 → 30.3.2 + deps (Linux only)
+//
+// The Linux zip is already flat (bin/+lib/ at top), the mingw64 zip nests
+// everything under qpdf-12.3.2-mingw64/. `eachFile` strips the latter prefix.
+//
+// `libqpdf.so.30` is a SONAME symlink to `libqpdf.so.30.3.2`. Gradle's archive
+// extraction dereferences it, so a post-sync NIO step recreates it; the qpdf
+// binary's RUNPATH=../lib then resolves at runtime.
+val hostIsLinux =
+    org.gradle.internal.os.OperatingSystem
+        .current()
+        .isLinux
+val hostIsWindows =
+    org.gradle.internal.os.OperatingSystem
+        .current()
+        .isWindows
+
+abstract class StageJpackageInput : DefaultTask() {
+    @get:InputFiles abstract val shadowJar: ConfigurableFileCollection
+
+    @get:InputFiles abstract val qpdfZip: ConfigurableFileCollection
+
+    @get:OutputDirectory abstract val outputDir: DirectoryProperty
+
+    @get:Input abstract val fixLinuxSoSymlink: Property<Boolean>
+
+    @get:Inject abstract val archives: ArchiveOperations
+
+    @get:Inject abstract val files: FileSystemOperations
+
+    @TaskAction
+    fun run() {
+        files.sync {
+            from(shadowJar)
+            if (!qpdfZip.isEmpty) {
+                from(archives.zipTree(qpdfZip.singleFile)) {
+                    eachFile {
+                        val segs = relativePath.segments
+                        if (segs.isNotEmpty() && segs[0].startsWith("qpdf-")) {
+                            relativePath =
+                                RelativePath(true, *segs.drop(1).toTypedArray())
+                        }
+                    }
+                    includeEmptyDirs = false
+                    // headers / docs not needed at runtime
+                    exclude("**/include/**", "**/share/**", "**/doc/**")
+                }
+            }
+            into(outputDir)
+        }
+        if (fixLinuxSoSymlink.get()) {
+            val libDir =
+                outputDir
+                    .get()
+                    .asFile
+                    .toPath()
+                    .resolve("lib")
+            val link = libDir.resolve("libqpdf.so.30")
+            val target = libDir.resolve("libqpdf.so.30.3.2")
+            if (Files.isRegularFile(link) && Files.isRegularFile(target)) {
+                Files.delete(link)
+                Files.createSymbolicLink(link, libDir.relativize(target))
+            }
+        }
+    }
+}
+
 val stageJpackageInput =
-    tasks.register<Sync>("stageJpackageInput") {
+    tasks.register<StageJpackageInput>("stageJpackageInput") {
         group = "distribution"
-        description = "Stage the shadow jar into an isolated input directory for jpackage"
-        dependsOn(tasks.shadowJar)
-        from(tasks.shadowJar.flatMap { it.archiveFile })
-        into(jpackageInputDir)
+        description =
+            "Stage shadow jar and (on Linux/Windows) qpdf into jpackage-input/"
+        shadowJar.from(tasks.shadowJar.flatMap { it.archiveFile })
+        if (hostIsLinux || hostIsWindows) {
+            qpdfZip.from(qpdfBinary)
+        }
+        outputDir.set(jpackageInputDir)
+        fixLinuxSoSymlink.set(hostIsLinux)
     }
 
 val cleanJreImage =

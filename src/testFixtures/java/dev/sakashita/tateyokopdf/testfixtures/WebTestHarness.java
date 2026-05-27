@@ -48,7 +48,7 @@ public final class WebTestHarness {
             workers,
             new UploadValidator(),
             new JobFactory(registry),
-            new DownloadHandler(registry),
+            new DownloadHandler(),
             new SafeExecutor(),
             PdfPostProcessor.noOp());
     IdleShutdown idle =

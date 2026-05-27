@@ -9,8 +9,11 @@ import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermissions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
+import org.junit.jupiter.api.condition.EnabledOnOs;
+import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
 
 final class QpdfLinearizerTest {
@@ -65,6 +68,35 @@ final class QpdfLinearizerTest {
         .isInstanceOfSatisfying(
             SpreadException.class,
             ex -> assertThat(ex.kind()).isEqualTo(ErrorKind.PDF_WRITE_FAILED));
+  }
+
+  @Test
+  @EnabledOnOs({OS.LINUX, OS.MAC})
+  void resolveBundledQpdfPrefersBinSubdirectory(@TempDir Path tmp) throws Exception {
+    // Mirrors the upstream zip layout staged by `stageJpackageInput`:
+    //   <jarDir>/bin/qpdf   (executable)
+    Path binDir = Files.createDirectory(tmp.resolve("bin"));
+    Path bundled = binDir.resolve("qpdf");
+    Files.copy(Path.of("/bin/true"), bundled);
+    Files.setPosixFilePermissions(bundled, PosixFilePermissions.fromString("rwxr-xr-x"));
+
+    assertThat(QpdfLinearizer.resolveBundledQpdfIn(tmp)).contains(bundled);
+  }
+
+  @Test
+  @EnabledOnOs({OS.LINUX, OS.MAC})
+  void resolveBundledQpdfFallsBackToFlatLayout(@TempDir Path tmp) throws Exception {
+    // Dev tree / older bundles may stage qpdf directly next to the jar.
+    Path bundled = tmp.resolve("qpdf");
+    Files.copy(Path.of("/bin/true"), bundled);
+    Files.setPosixFilePermissions(bundled, PosixFilePermissions.fromString("rwxr-xr-x"));
+
+    assertThat(QpdfLinearizer.resolveBundledQpdfIn(tmp)).contains(bundled);
+  }
+
+  @Test
+  void resolveBundledQpdfReturnsEmptyWhenAbsent(@TempDir Path tmp) {
+    assertThat(QpdfLinearizer.resolveBundledQpdfIn(tmp)).isEmpty();
   }
 
   @Test
