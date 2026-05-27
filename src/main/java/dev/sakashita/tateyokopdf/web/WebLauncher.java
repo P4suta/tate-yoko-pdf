@@ -73,8 +73,10 @@ public final class WebLauncher {
             new JobFactory(registry),
             new DownloadHandler(registry));
     WebExceptionHandler exHandler = new WebExceptionHandler();
+    ShutdownState shutdownState = new ShutdownState();
     HealthController health =
-        new HealthController(new HealthCheck(registry::size, (ThreadPoolExecutor) workers));
+        new HealthController(
+            new HealthCheck(registry::size, (ThreadPoolExecutor) workers), shutdownState);
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();
@@ -102,7 +104,7 @@ public final class WebLauncher {
             new Thread(
                 () -> {
                   log.info("Shutting down web server");
-                  ShutdownState.beginShutdown();
+                  shutdownState.beginShutdown();
                   try {
                     app.stop();
                   } finally {

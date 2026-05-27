@@ -10,19 +10,10 @@ import java.nio.file.Path;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
 
-@ResourceLock(value = "observability.ShutdownState", mode = ResourceAccessMode.READ_WRITE)
 final class HealthControllerTest {
-
-  @AfterEach
-  void resetShutdownState() {
-    ShutdownState.reset();
-  }
 
   private static Javalin app(HealthController health) {
     return Javalin.create(
@@ -33,16 +24,16 @@ final class HealthControllerTest {
         });
   }
 
-  private static HealthController upController(Path workDir) {
+  private static HealthController upController(Path workDir, ShutdownState shutdownState) {
     var workers =
         new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-    return new HealthController(new HealthCheck(() -> 0, workers, workDir, 1L));
+    return new HealthController(new HealthCheck(() -> 0, workers, workDir, 1L), shutdownState);
   }
 
   @Test
   void livenessReturns200UpByDefault(@TempDir Path tmp) {
     JavalinTest.test(
-        app(upController(tmp)),
+        app(upController(tmp, new ShutdownState())),
         (server, client) -> {
           var resp = client.get("/api/health/live");
           assertThat(resp.code()).isEqualTo(200);
@@ -53,7 +44,7 @@ final class HealthControllerTest {
   @Test
   void readinessReturns200WithChecks(@TempDir Path tmp) {
     JavalinTest.test(
-        app(upController(tmp)),
+        app(upController(tmp, new ShutdownState())),
         (server, client) -> {
           var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(200);
@@ -66,7 +57,7 @@ final class HealthControllerTest {
   @Test
   void healthDelegatesToReadiness(@TempDir Path tmp) {
     JavalinTest.test(
-        app(upController(tmp)),
+        app(upController(tmp, new ShutdownState())),
         (server, client) -> {
           var resp = client.get("/api/health");
           assertThat(resp.code()).isEqualTo(200);
@@ -80,7 +71,7 @@ final class HealthControllerTest {
         new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     // disk threshold so high it cannot pass
     var hc = new HealthCheck(() -> 0, workers, tmp, Long.MAX_VALUE);
-    var controller = new HealthController(hc);
+    var controller = new HealthController(hc, new ShutdownState());
     JavalinTest.test(
         app(controller),
         (server, client) -> {
@@ -92,9 +83,10 @@ final class HealthControllerTest {
 
   @Test
   void livenessReturns503DuringShutdown(@TempDir Path tmp) {
-    ShutdownState.beginShutdown();
+    var shutdownState = new ShutdownState();
+    shutdownState.beginShutdown();
     JavalinTest.test(
-        app(upController(tmp)),
+        app(upController(tmp, shutdownState)),
         (server, client) -> {
           var resp = client.get("/api/health/live");
           assertThat(resp.code()).isEqualTo(503);
@@ -104,9 +96,10 @@ final class HealthControllerTest {
 
   @Test
   void readinessReturns503DuringShutdown(@TempDir Path tmp) {
-    ShutdownState.beginShutdown();
+    var shutdownState = new ShutdownState();
+    shutdownState.beginShutdown();
     JavalinTest.test(
-        app(upController(tmp)),
+        app(upController(tmp, shutdownState)),
         (server, client) -> {
           var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(503);

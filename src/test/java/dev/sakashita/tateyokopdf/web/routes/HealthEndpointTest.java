@@ -5,18 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.sakashita.tateyokopdf.testfixtures.WebTestHarness;
 import io.javalin.testtools.JavalinTest;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.parallel.ResourceAccessMode;
-import org.junit.jupiter.api.parallel.ResourceLock;
 
-/**
- * Smoke-test that the harness wires up all three health routes under the /api prefix.
- *
- * <p>The READ lock on {@code observability.ShutdownState} serialises this class against {@code
- * HealthControllerTest.readinessReturns503DuringShutdown}, which holds the same lock in READ_WRITE
- * mode. Without it, the writer could flip the JVM-static shutdown flag while these tests are
- * mid-request and one of the health endpoints would observe 503 instead of 200.
- */
-@ResourceLock(value = "observability.ShutdownState", mode = ResourceAccessMode.READ)
+/** Smoke-test that the harness wires up all three health routes under the /api prefix. */
 final class HealthEndpointTest {
 
   @Test

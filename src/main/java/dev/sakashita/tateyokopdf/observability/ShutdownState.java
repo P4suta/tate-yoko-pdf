@@ -3,25 +3,19 @@ package dev.sakashita.tateyokopdf.observability;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Process-wide latch flipped by the shutdown hook so that {@code /health/ready} can start returning
- * 503 before Jetty actually stops accepting connections.
+ * Latch flipped by the shutdown hook so that {@code /health/ready} can start returning 503 before
+ * Jetty actually stops accepting connections. Held as an instance so each test can construct its
+ * own — no shared JVM-static state means no inter-test race against parallel JUnit execution.
  */
 public final class ShutdownState {
 
-  private static final AtomicBoolean SHUTTING_DOWN = new AtomicBoolean(false);
+  private final AtomicBoolean shuttingDown = new AtomicBoolean(false);
 
-  private ShutdownState() {}
-
-  public static void beginShutdown() {
-    SHUTTING_DOWN.set(true);
+  public void beginShutdown() {
+    shuttingDown.set(true);
   }
 
-  public static boolean isShuttingDown() {
-    return SHUTTING_DOWN.get();
-  }
-
-  /** Test seam; clear the flag between tests. */
-  public static void reset() {
-    SHUTTING_DOWN.set(false);
+  public boolean isShuttingDown() {
+    return shuttingDown.get();
   }
 }
