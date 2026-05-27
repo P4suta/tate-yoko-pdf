@@ -6,6 +6,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
@@ -31,6 +32,11 @@ public final class IdleShutdown {
   private final ScheduledExecutorService scheduler;
   private final AtomicInteger active = new AtomicInteger(0);
   private final AtomicReference<Instant> lastDisconnect;
+  // Guards against cold-start shutdown: with a short idleTimeout (5s) the
+  // server could otherwise exit before Javalin finishes booting + the browser
+  // launches + the SvelteKit page hydrates and opens /ws/keepalive. The
+  // countdown only starts after the first real keepalive has connected.
+  private final AtomicBoolean everConnected = new AtomicBoolean(false);
   private @Nullable ScheduledFuture<?> task;
 
   public IdleShutdown(Duration idleTimeout, Duration checkInterval, Runnable shutdownAction) {
@@ -80,6 +86,7 @@ public final class IdleShutdown {
   }
 
   public void onConnect() {
+    everConnected.set(true);
     int n = active.incrementAndGet();
     log.debug("keepalive open ({} active)", n);
   }
@@ -92,6 +99,9 @@ public final class IdleShutdown {
 
   private void check() {
     try {
+      if (!everConnected.get()) {
+        return;
+      }
       if (active.get() > 0) {
         return;
       }
