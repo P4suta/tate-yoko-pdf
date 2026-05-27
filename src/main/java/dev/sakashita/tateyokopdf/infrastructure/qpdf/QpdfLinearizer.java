@@ -22,9 +22,11 @@ import org.slf4j.LoggerFactory;
  * with Fast Web View bytes-order. The binary is resolved in this order:
  *
  * <ol>
- *   <li>The in-bundle copy next to the shadow JAR (jpackage stages it under {@code app/} via {@code
- *       --input}; {@link #resolveBundledQpdf()} finds the JAR location and looks for {@code qpdf}
- *       (or {@code qpdf.exe}) as a sibling).
+ *   <li>The in-bundle copy staged by {@code stageJpackageInput} from the upstream release zip.
+ *       jpackage drops the input next to the shadow JAR under {@code app/}; the zip's native layout
+ *       puts the executable at {@code bin/qpdf} (or {@code bin\qpdf.exe}). {@link
+ *       #resolveBundledQpdf()} therefore probes the {@code bin/} subdirectory first, then falls
+ *       back to a flat sibling layout for legacy dev-tree runs.
  *   <li>{@code which qpdf} / {@code where qpdf} on {@code PATH} — for dev runs from the source tree
  *       on a machine that has qpdf installed.
  *   <li>Falls back to {@link PdfPostProcessor#noOp()} and logs a single warning so a missing binary
@@ -96,7 +98,6 @@ public final class QpdfLinearizer implements PdfPostProcessor {
   }
 
   static Optional<Path> resolveBundledQpdf() {
-    String executableName = osIsWindows() ? "qpdf.exe" : "qpdf";
     try {
       var codeSource = QpdfLinearizer.class.getProtectionDomain().getCodeSource();
       if (codeSource == null) {
@@ -107,12 +108,27 @@ public final class QpdfLinearizer implements PdfPostProcessor {
       if (jarDir == null) {
         return Optional.empty();
       }
-      Path candidate = jarDir.resolve(executableName);
-      return Files.isExecutable(candidate) ? Optional.of(candidate) : Optional.empty();
+      return resolveBundledQpdfIn(jarDir);
     } catch (URISyntaxException | RuntimeException e) {
       log.debug("Could not derive bundled qpdf path from class location: {}", e.getMessage());
       return Optional.empty();
     }
+  }
+
+  // Package-private so tests can drive the lookup with a synthetic directory
+  // without going through the class-loader/CodeSource probe.
+  static Optional<Path> resolveBundledQpdfIn(Path jarDir) {
+    String executableName = osIsWindows() ? "qpdf.exe" : "qpdf";
+    Path[] candidates = {
+      jarDir.resolve("bin").resolve(executableName), // upstream zip layout
+      jarDir.resolve(executableName), // legacy / flat dev-tree layout
+    };
+    for (Path candidate : candidates) {
+      if (Files.isExecutable(candidate)) {
+        return Optional.of(candidate);
+      }
+    }
+    return Optional.empty();
   }
 
   // Error Prone's StringSplitter check wants Guava's Splitter; pulling Guava in for one PATH

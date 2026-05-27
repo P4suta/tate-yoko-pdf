@@ -79,7 +79,7 @@ public final class WebLauncher {
             workers,
             new UploadValidator(),
             new JobFactory(registry),
-            new DownloadHandler(registry),
+            new DownloadHandler(),
             new SafeExecutor(),
             QpdfLinearizer.create());
     WebExceptionHandler exHandler = new WebExceptionHandler();

@@ -77,7 +77,7 @@ final class JobErrorPathIntegrationTest {
     Job job =
         registry.register(workDir, workDir.resolve("input.pdf"), missing, "foo.pdf", "trace-gone");
 
-    DownloadHandler handler = new DownloadHandler(registry);
+    DownloadHandler handler = new DownloadHandler();
     WebExceptionHandler exHandler = new WebExceptionHandler();
     Javalin app =
         Javalin.create(

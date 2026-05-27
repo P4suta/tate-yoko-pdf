@@ -43,7 +43,8 @@ $ ./tate-yoko-pdf       # 引数なしで起動
 - **WebSocketで進捗ストリーミング**（ポーリングなし）
 - **タブを閉じると自動シャットダウン**（WebSocket keepaliveで生存判定、60秒の猶予あり）
 - **多重起動防止**: 起動済みインスタンスがあればそのURLを開くだけ（ロックファイル + PID + /health 確認）
-- **一時ファイルの自動GC**: ダウンロード完了で即削除、未ダウンロードでも1時間でGC
+- **一時ファイルの自動GC**: 1時間TTLで作業ディレクトリを自動削除
+- **Fast Web View 出力**: 生成 PDF は qpdf で linearize されるため、ブラウザ内蔵 viewer が先頭ページからストリーミング描画可能（HTTP Range Request 対応）
 
 ### B. CLI（パイプライン・自動化向け）
 
@@ -300,6 +301,14 @@ JaCoCo は層別 threshold で `check` の必須ゲート: `domain.*` 95% / `app
 | `GET /api/health` | 後方互換 (= `/api/health/ready`) | 同上 |
 
 disk threshold は env `TATE_YOKO_HEALTH_MIN_FREE_MB` で上書き可能 (デフォルト 100MB)。
+
+### Fast Web View / qpdf 同梱
+
+生成 PDF は **qpdf 12.3.2** で linearize（Fast Web View bytes-order）してから配信します。先頭オブジェクトに hint table を持ち、`/api/jobs/{id}/download` は HTTP Range Request (`Accept-Ranges: bytes`) に応答するため、ブラウザ内蔵 PDF viewer は先頭ページの byte だけ取得して即座に描画を開始できます。
+
+- **Linux x86_64 / Windows x86_64** app-image: qpdf バイナリを upstream zip から自動同梱（追加インストール不要）
+- **macOS**: upstream に公式バイナリが無いため `brew install qpdf` で PATH に置いてください。未インストール時は valid だが非 linearized な PDF を出力します（Fast Web View なし、その他の挙動は同等）
+- バイナリは Apache License 2.0（[qpdf license](https://github.com/qpdf/qpdf/blob/main/Artistic-2.0)）
 
 ### 配布 (bundled JRE)
 
