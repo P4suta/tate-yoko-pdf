@@ -43,21 +43,22 @@ final class WebProgressListenerTest {
   }
 
   @Test
-  void completedTriggersTerminalAndJobStatusCompleted() {
-    Job job = sampleJob();
-    var l = new WebProgressListener(job);
+  void completedTriggersTerminalFlag() {
+    var l = new WebProgressListener(sampleJob());
     l.onStart(1);
     l.onSpreadComplete(1, 1);
+    assertThat(l.terminal()).isFalse();
     l.onComplete(123L);
-    assertThat(job.status()).isInstanceOf(JobStatus.Completed.class);
+    assertThat(l.terminal()).isTrue();
+    assertThat(l.history()).hasSize(3);
+    assertThat(l.history().get(2)).isInstanceOf(ProgressEvent.Completed.class);
   }
 
   @Test
   void failWithSpreadExceptionPropagatesKindAndMessage() {
-    Job job = sampleJob();
-    var l = new WebProgressListener(job);
+    var l = new WebProgressListener(sampleJob());
     l.fail(SpreadException.of(ErrorKind.PDF_CORRUPTED));
-    assertThat(job.status()).isInstanceOf(JobStatus.Failed.class);
+    assertThat(l.terminal()).isTrue();
     BlockingQueue<ProgressEvent> q = l.subscribe();
     ProgressEvent ev = q.poll();
     assertThat(ev).isInstanceOf(ProgressEvent.Failed.class);
@@ -68,8 +69,7 @@ final class WebProgressListenerTest {
 
   @Test
   void failWithStringMapsToInternalKind() {
-    Job job = sampleJob();
-    var l = new WebProgressListener(job);
+    var l = new WebProgressListener(sampleJob());
     l.fail("plain message");
     BlockingQueue<ProgressEvent> q = l.subscribe();
     ProgressEvent.Failed f = (ProgressEvent.Failed) q.poll();
@@ -79,8 +79,7 @@ final class WebProgressListenerTest {
 
   @Test
   void subscribeAfterTerminalDoesNotEnqueueFutureEvents() {
-    Job job = sampleJob();
-    var l = new WebProgressListener(job);
+    var l = new WebProgressListener(sampleJob());
     l.fail(SpreadException.of(ErrorKind.PDF_CORRUPTED));
     BlockingQueue<ProgressEvent> q = l.subscribe();
     assertThat(q).hasSize(1);

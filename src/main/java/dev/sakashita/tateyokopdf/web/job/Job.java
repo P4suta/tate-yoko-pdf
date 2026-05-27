@@ -4,6 +4,11 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.UUID;
 
+/**
+ * Immutable job identity + filesystem coordinates. Runtime state (started / running / completed /
+ * failed) lives entirely on {@link WebProgressListener#history()} — the listener's event stream is
+ * the single source of truth for "where is this job now."
+ */
 public final class Job {
 
   private final UUID id;
@@ -13,7 +18,6 @@ public final class Job {
   private final String originalName;
   private final Instant createdAt;
   private final String traceId;
-  private volatile JobStatus status;
 
   public Job(
       UUID id,
@@ -40,7 +44,6 @@ public final class Job {
     this.originalName = originalName;
     this.createdAt = createdAt;
     this.traceId = traceId;
-    this.status = new JobStatus.Pending();
   }
 
   public UUID id() {
@@ -69,13 +72,5 @@ public final class Job {
 
   public String traceId() {
     return traceId;
-  }
-
-  public JobStatus status() {
-    return status;
-  }
-
-  public void setStatus(JobStatus status) {
-    this.status = status;
   }
 }
