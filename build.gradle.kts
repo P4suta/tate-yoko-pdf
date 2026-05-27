@@ -896,21 +896,10 @@ val jpackageImage =
                 .archiveFileName
                 .get()
 
-        // Windows: `--win-console` produces a console-attached launcher that
-        // blocks on the embedded JVM and writes stdout/stderr to the terminal.
-        // Without it, jpackage emits a windowed (GUI) launcher that returns
-        // control immediately after spawning the JVM — fine for desktop apps
-        // but breaks our CLI mode (callers can't observe completion or output).
-        val osArgs: List<String> =
-            if (org.gradle.internal.os.OperatingSystem
-                    .current()
-                    .isWindows
-            ) {
-                listOf("--win-console")
-            } else {
-                emptyList()
-            }
-
+        // Windows: no `--win-console`. The launcher attaches to the `windows`
+        // subsystem so double-click does not spawn a black console window.
+        // The trade-off (CLI users can't see stdout/stderr live) is paid back
+        // by Main.java's RollingFileAppender at %APPDATA%/tate-yoko-pdf/logs/.
         commandLine =
             listOf(
                 toolPath("jpackage").get(),
@@ -932,7 +921,7 @@ val jpackageImage =
                 project.version.toString(),
                 "--java-options",
                 "-Xmx2g",
-            ) + osArgs
+            )
 
         inputs.dir(jreImageDir)
         inputs.dir(jpackageInputDir)

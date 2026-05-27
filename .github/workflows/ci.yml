@@ -151,8 +151,18 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          & ".\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
-            build\test-data\sample.pdf -o build\test-data\jpackage-out.pdf
+          # Start-Process -Wait is required because tate-yoko-pdf.exe is built
+          # as a windowed-subsystem launcher (no --win-console). PowerShell's
+          # `&` operator only waits for console-subsystem programs; for windowed
+          # ones it returns immediately, racing the file read below.
+          $proc = Start-Process -Wait -NoNewWindow -PassThru `
+            -FilePath ".\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
+            -ArgumentList @(
+              'build\test-data\sample.pdf',
+              '-o',
+              'build\test-data\jpackage-out.pdf'
+            )
+          if ($proc.ExitCode -ne 0) { throw "tate-yoko-pdf.exe exited $($proc.ExitCode)" }
           $bytes = [System.IO.File]::ReadAllBytes("build/test-data/jpackage-out.pdf")
           $head = [System.Text.Encoding]::ASCII.GetString($bytes[0..3])
           if ($head -ne '%PDF') { throw "Output is not a PDF: prefix=$head" }

@@ -13,7 +13,10 @@ import org.junit.jupiter.api.Test;
 final class IdleShutdownTest {
 
   @Test
-  void invokesShutdownAfterIdleTimeout() {
+  void coldStartWithoutAnyConnectionNeverShutsDown() {
+    // Cold-start safety: with the production 5s idleTimeout, the server must not
+    // exit while Javalin is still booting + the OS browser is launching + SvelteKit
+    // is hydrating. The countdown starts only after the first keepalive lands.
     var fires = new AtomicInteger();
     var clock = TestClock.at(Instant.parse("2026-01-01T00:00:00Z"));
     var idle =
@@ -21,10 +24,13 @@ final class IdleShutdownTest {
             Duration.ofMillis(50), Duration.ofMillis(20), fires::incrementAndGet, clock);
     idle.start();
     try {
-      // advance time past the idle threshold
-      clock.advance(Duration.ofMillis(100));
-      await().atMost(2, TimeUnit.SECONDS).until(() -> fires.get() >= 1);
-      assertThat(fires.get()).isGreaterThanOrEqualTo(1);
+      clock.advance(Duration.ofMillis(500)); // ten timeout windows
+      try {
+        Thread.sleep(150);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+      }
+      assertThat(fires.get()).isZero();
     } finally {
       idle.stop();
     }
