@@ -55,24 +55,26 @@ format:
 shadow:
     @just dev-run ./gradlew shadowJar
 
-# Build the native-image binary
-native:
-    @just dev-run ./gradlew nativeCompile
+# Build the jpackage app-image (bundled JRE + shadow jar) under build/dist-jpackage/
+package:
+    @just dev-run ./gradlew jpackageImage
+
+# SvelteKit dev server (Vite HMR on http://127.0.0.1:5173, /api & /ws proxied to :8080)
+frontend-dev:
+    @just dev-run bash -c 'cd frontend && corepack pnpm run dev --host 0.0.0.0'
+
+# Build the SvelteKit frontend (static SPA) into frontend/build/
+frontend-build:
+    @just dev-run ./gradlew buildFrontend
 
 # Start the web app in JVM mode (background); http://127.0.0.1:8080/
 web: shadow
     docker compose --profile web up -d web
     @echo "→ http://127.0.0.1:8080/"
 
-# Start the web app as a native binary (background); http://127.0.0.1:8080/
-web-native: native
-    docker compose --profile web-native up -d web-native
-    @echo "→ http://127.0.0.1:8080/"
-
 # Stop any running web container
 web-stop:
     -docker compose --profile web down web --remove-orphans
-    -docker compose --profile web-native down web-native --remove-orphans
 
 # Generate a 4-page sample PDF at build/test-data/sample.pdf
 sample-pdf:
@@ -100,31 +102,24 @@ warmup:
     @just dev-run ./gradlew --quiet help
     @echo "→ dev image built, Gradle cache primed."
 
-# Reproduce CI's Linux native smoke (build + CLI + web upload/download) locally.
-smoke: native
-    @just dev-run bash -c '\
-        ./build/native/nativeCompile/tate-yoko-pdf \
-            build/test-data/sample.pdf \
-            -o build/test-data/native-out.pdf \
-        && test -s build/test-data/native-out.pdf \
-        && file build/test-data/native-out.pdf | grep -q PDF \
-        && echo "✓ CLI smoke passed"'
-
-# Run JVM tests under the native-image agent to auto-generate reflect/proxy/resource config
-trace:
-    @just dev-run ./gradlew -Pagent test
-    @echo "→ Agent config written under build/agent-config/. Diff it against META-INF/native-image/."
+# Build the app-image and run a Linux CLI smoke against build/test-data/sample.pdf.
+# The grep on the output verifies the file exists, is readable, and contains
+# the canonical "%PDF" header — enough to catch jpackage-bundle breakage.
+smoke: sample-pdf package
+    @just dev-run ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
+    @just dev-run grep -q %PDF build/test-data/jpackage-out.pdf
+    @echo "✓ jpackage CLI smoke passed"
 
 # Remove this project's Docker artifacts (containers, networks, named volumes, locally-built images).
 docker-clean:
-    docker compose --profile dev --profile web --profile web-native down -v --remove-orphans --rmi local
+    docker compose --profile dev --profile web down -v --remove-orphans --rmi local
 
 # Show Docker disk usage (machine-wide) and this project's container/volume state.
 docker-status:
     docker system df
     @echo
     @echo '--- tate-yoko-pdf ---'
-    -docker compose --profile dev --profile web --profile web-native ps -a
+    -docker compose --profile dev --profile web ps -a
     docker volume ls --filter 'label=com.docker.compose.project=tate-yoko-pdf'
 
 # Launch an interactive TUI (lazydocker) to inspect machine-wide Docker state.

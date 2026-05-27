@@ -6,7 +6,7 @@ import dev.sakashita.tateyokopdf.testfixtures.WebTestHarness;
 import io.javalin.testtools.JavalinTest;
 import org.junit.jupiter.api.Test;
 
-/** Smoke-test that the harness wires up all three health routes. */
+/** Smoke-test that the harness wires up all three health routes under the /api prefix. */
 final class HealthEndpointTest {
 
   @Test
@@ -14,7 +14,7 @@ final class HealthEndpointTest {
     JavalinTest.test(
         WebTestHarness.app(),
         (server, client) -> {
-          var resp = client.get("/health");
+          var resp = client.get("/api/health");
           assertThat(resp.code()).isEqualTo(200);
           String body = resp.body().string();
           assertThat(body).contains("\"status\":\"UP\"");
@@ -27,7 +27,7 @@ final class HealthEndpointTest {
     JavalinTest.test(
         WebTestHarness.app(),
         (server, client) -> {
-          var resp = client.get("/health/live");
+          var resp = client.get("/api/health/live");
           assertThat(resp.code()).isEqualTo(200);
           assertThat(resp.body().string()).contains("\"status\":\"UP\"");
         });
@@ -38,7 +38,7 @@ final class HealthEndpointTest {
     JavalinTest.test(
         WebTestHarness.app(),
         (server, client) -> {
-          var resp = client.get("/health/ready");
+          var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(200);
         });
   }

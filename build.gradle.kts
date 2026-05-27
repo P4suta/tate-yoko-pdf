@@ -27,11 +27,11 @@ plugins {
     jacoco
     `java-test-fixtures`
     id("com.gradleup.shadow") version "9.4.1"
-    id("org.graalvm.buildtools.native") version "1.1.1"
     id("com.diffplug.spotless") version "8.5.1"
     id("net.ltgt.errorprone") version "5.1.0"
+    id("com.github.spotbugs") version "6.0.27"
     id("com.github.ben-manes.versions") version "0.54.0"
-    id("gg.jte.gradle") version "3.2.4"
+    id("com.github.node-gradle.node") version "7.1.0"
 }
 
 group = "dev.sakashita"
@@ -58,9 +58,6 @@ dependencies {
     implementation("info.picocli:picocli:4.7.7")
     implementation("ch.qos.logback:logback-classic:1.5.32")
     implementation("io.javalin:javalin:7.2.2")
-    implementation("gg.jte:jte:3.2.4")
-    implementation("gg.jte:jte-runtime:3.2.4")
-    jteGenerate("gg.jte:jte-native-resources:3.2.4")
 
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
@@ -86,15 +83,6 @@ dependencies {
     testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testFixturesImplementation("org.jspecify:jspecify:1.0.0")
     testFixturesImplementation("io.javalin:javalin:7.2.2")
-    testFixturesImplementation("gg.jte:jte:3.2.4")
-    testFixturesImplementation("gg.jte:jte-runtime:3.2.4")
-}
-
-jte {
-    generate()
-    binaryStaticContent = true
-    contentType = gg.jte.ContentType.Html
-    jteExtension("gg.jte.nativeimage.NativeResourcesExtension")
 }
 
 spotless {
@@ -125,6 +113,33 @@ tasks.withType<JavaCompile>().configureEach {
 
 jacoco {
     toolVersion = "0.8.13"
+}
+
+// SpotBugs operates on compiled bytecode, complementing source-level Error Prone
+// and JSpecify/NullAway analysis. Strict tuning: MAX effort runs every detector
+// (slowest, most thorough) and MEDIUM confidence reports both definite and
+// likely bugs while filtering speculative noise (LOW confidence flooded with
+// EI/EI2 reports on immutable Path/Instant fields, plus DM_DEFAULT_ENCODING
+// hits in third-party output paths). The build fails on any finding.
+spotbugs {
+    toolVersion = "4.9.6"
+    effort = com.github.spotbugs.snom.Effort.MAX
+    reportLevel = com.github.spotbugs.snom.Confidence.MEDIUM
+    ignoreFailures = false
+    showStackTraces = true
+    excludeFilter = file("config/spotbugs/exclude.xml")
+}
+
+// Limit SpotBugs to production code only. Test code uses Mockito / assertion
+// patterns that generate noisy false positives (DM_DEFAULT_ENCODING, etc.).
+tasks.named("spotbugsTest").configure { enabled = false }
+tasks.named("spotbugsTestFixtures").configure { enabled = false }
+
+tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
+    reports {
+        create("html") { required.set(true) }
+        create("xml") { required.set(true) }
+    }
 }
 
 // Dependabot security alerts: pin transitive deps on every runtime/test
@@ -250,12 +265,15 @@ tasks.jacocoTestCoverageVerification {
         rule {
             // WS pump (`onProgressWs` thread) and download streaming are exercised in M4
             // end-to-end smoke tests; this baseline guards against regressions in submit/lookup.
+            // 0.45 (down from 0.50) after the JTE → SvelteKit migration removed PageController
+            // and JobController.showProgress/showResult — the package is smaller and a single
+            // uncovered streaming branch now moves the ratio more.
             element = "PACKAGE"
             includes = listOf("dev.sakashita.tateyokopdf.web.routes")
             limit {
                 counter = "LINE"
                 value = "COVEREDRATIO"
-                minimum = "0.50".toBigDecimal()
+                minimum = "0.45".toBigDecimal()
             }
         }
         rule {
@@ -502,36 +520,190 @@ tasks.register<JavaExec>("createSamplePdf") {
     args = listOf("build/test-data/sample.pdf", "4")
 }
 
-graalvmNative {
-    // Pull in upstream reachability metadata for popular libraries so we don't
-    // have to hand-maintain every reflect-config / proxy-config / resource-config.
-    metadataRepository {
-        enabled = true
+// ---- SvelteKit frontend (Svelte 5 + TS + Vite + adapter-static) -------------
+// Node.js (with corepack-managed pnpm) is provided by the dev container or by
+// `actions/setup-node@v4` in CI; the plugin uses whatever pnpm is in PATH.
+node {
+    download = false
+    nodeProjectDir = file("frontend")
+}
+
+val installFrontendDeps =
+    tasks.register<com.github.gradle.node.pnpm.task.PnpmTask>("installFrontendDeps") {
+        group = "frontend"
+        description = "Install SvelteKit frontend dependencies via pnpm"
+        args = listOf("install", "--frozen-lockfile")
+        inputs.file("frontend/package.json")
+        inputs.file("frontend/pnpm-lock.yaml")
+        outputs.dir("frontend/node_modules")
+        outputs.cacheIf { false } // node_modules is too large/fan-out for the build cache
     }
-    binaries {
-        named("main") {
-            mainClass = application.mainClass
-            buildArgs.add("--no-fallback")
-            buildArgs.add("-H:+ReportExceptionStackTraces")
-            // Windows-1252 and other charsets used by PDFBox's BaseParser static init.
-            buildArgs.add("-H:+UnlockExperimentalVMOptions")
-            buildArgs.add("-H:+AddAllCharsets")
-            // Force AWT into headless mode at build time so PDFBox' Raster/ColorModel
-            // <clinit> does not try to load X11-only graphics during the image build.
-            buildArgs.add("-J-Djava.awt.headless=true")
-            // (`--gc=G1` would help here but is Oracle GraalVM EE only — the CE /
-            //  Liberica NIK build we ship rejects it. Leaving the default GC.)
-            // Build a binary that runs on any x86-64 / arm64 baseline CPU; without
-            // this GraalVM 25 defaults to a higher microarch level and the binary
-            // can SIGILL on older hardware end-users may still have.
-            buildArgs.add("-march=compatibility")
-            // (`--initialize-at-build-time=ch.qos.logback` looks appealing but
-            //  logback transitively touches `org.xml.sax.helpers.LocatorImpl`,
-            //  which native-image refuses to initialize at build time. Leaving
-            //  logback as run-time-initialized; the metadata repo already covers
-            //  the substantive reachability work.)
-            resources.includedPatterns.add(".*\\.xml")
-            resources.includedPatterns.add(".*\\.properties")
-        }
+
+val buildFrontend =
+    tasks.register<com.github.gradle.node.pnpm.task.PnpmTask>("buildFrontend") {
+        group = "frontend"
+        description = "Build the SvelteKit SPA (static output via adapter-static)"
+        dependsOn(installFrontendDeps)
+        args = listOf("run", "build")
+        inputs.files(
+            "frontend/svelte.config.js",
+            "frontend/vite.config.ts",
+            "frontend/tsconfig.json",
+            "frontend/package.json",
+            "frontend/pnpm-lock.yaml",
+        )
+        inputs.dir("frontend/src")
+        inputs.dir("frontend/static")
+        outputs.dir("frontend/build")
+    }
+
+// Stage the SvelteKit static output into the JAR under /static so Javalin's
+// staticFiles handler can serve it at runtime (root paths) while API/WS routes
+// own /api/* and /ws/*.
+tasks.processResources {
+    dependsOn(buildFrontend)
+    from("frontend/build") {
+        into("static")
     }
 }
+
+// ---- Distribution: jlink + jpackage app-image ------------------------------
+// Replaces the GraalVM native-image path. Produces a directory layout under
+// build/jpackage/tate-yoko-pdf/ containing a launcher, a trimmed JRE (jlink),
+// and the application's shadow jar. The directory is zip-distributable as-is.
+//
+// We invoke jlink and jpackage directly (instead of via the Beryx plugin)
+// because Beryx 1.13.x is incompatible with Gradle 9.x — it relies on the
+// removed `Project.exec(...)` API and trips the configuration cache.
+
+val jpackageAppName = "tate-yoko-pdf"
+val bundledModules =
+    listOf(
+        // java.base + everything else needed for PDFBox / Javalin / Logback at runtime.
+        // - java.desktop is mandatory: PDFBox' PDDocument <clinit> touches
+        //   java.awt.image.Raster / ColorModel.
+        // - jdk.crypto.ec: TLS cipher suites used by Java HttpClient.
+        // - jdk.unsupported: sun.misc.Unsafe used by some transitive deps.
+        // - jdk.zipfs: PDFBox uses zip-style stream filters.
+        "java.base",
+        "java.desktop",
+        "java.naming",
+        "java.management",
+        "java.logging",
+        "java.net.http",
+        "java.sql",
+        "java.xml",
+        "jdk.crypto.ec",
+        "jdk.unsupported",
+        "jdk.zipfs",
+    )
+
+val javaHomeProvider: Provider<String> =
+    providers.systemProperty("java.home").orElse(providers.environmentVariable("JAVA_HOME"))
+
+fun toolPath(tool: String): Provider<String> =
+    javaHomeProvider.map { home ->
+        val exe =
+            if (org.gradle.internal.os.OperatingSystem
+                    .current()
+                    .isWindows
+            ) {
+                "$tool.exe"
+            } else {
+                tool
+            }
+        "$home/bin/$exe"
+    }
+
+// jlink and jpackage both refuse to write into a pre-existing directory.
+// Gradle eagerly creates declared `outputs.dir(...)` locations, so we declare
+// each tool's *parent* directory as the output and have the tool write into a
+// fixed-name child dir inside it. Gradle creates the parent; the tool creates
+// the child. Separate Delete tasks reset state between runs in a way that's
+// configuration-cache safe (project.delete inside doFirst is not).
+val jreOutputParent = layout.buildDirectory.dir("dist-jre")
+val jreImageDir = jreOutputParent.map { it.dir("runtime") }
+val jpackageOutputParent = layout.buildDirectory.dir("dist-jpackage")
+val jpackageInputDir = layout.buildDirectory.dir("jpackage-input")
+
+val stageJpackageInput =
+    tasks.register<Sync>("stageJpackageInput") {
+        group = "distribution"
+        description = "Stage the shadow jar into an isolated input directory for jpackage"
+        dependsOn(tasks.shadowJar)
+        from(tasks.shadowJar.flatMap { it.archiveFile })
+        into(jpackageInputDir)
+    }
+
+val cleanJreImage =
+    tasks.register<Delete>("cleanJreImage") {
+        delete(jreImageDir)
+    }
+
+val cleanJpackageImage =
+    tasks.register<Delete>("cleanJpackageImage") {
+        // Match the directory jpackage actually populates inside the parent.
+        delete(jpackageOutputParent.map { it.dir(jpackageAppName) })
+    }
+
+val jreImage =
+    tasks.register<Exec>("jreImage") {
+        group = "distribution"
+        description = "Run jlink to build a trimmed JRE under build/dist-jre/runtime/"
+        dependsOn(cleanJreImage)
+
+        commandLine =
+            listOf(
+                toolPath("jlink").get(),
+                "--add-modules",
+                bundledModules.joinToString(","),
+                "--strip-debug",
+                "--no-header-files",
+                "--no-man-pages",
+                "--compress=zip-9",
+                "--output",
+                jreImageDir.get().asFile.absolutePath,
+            )
+        inputs.property("modules", bundledModules.joinToString(","))
+        outputs.dir(jreOutputParent)
+    }
+
+val jpackageImage =
+    tasks.register<Exec>("jpackageImage") {
+        group = "distribution"
+        description = "Run jpackage to build the app-image under build/dist-jpackage/"
+        dependsOn(jreImage, stageJpackageInput, cleanJpackageImage)
+
+        val mainJarName =
+            tasks.shadowJar
+                .get()
+                .archiveFileName
+                .get()
+
+        commandLine =
+            listOf(
+                toolPath("jpackage").get(),
+                "--type",
+                "app-image",
+                "--name",
+                jpackageAppName,
+                "--input",
+                jpackageInputDir.get().asFile.absolutePath,
+                "--main-jar",
+                mainJarName,
+                "--main-class",
+                application.mainClass.get(),
+                "--runtime-image",
+                jreImageDir.get().asFile.absolutePath,
+                "--dest",
+                jpackageOutputParent.get().asFile.absolutePath,
+                "--app-version",
+                project.version.toString(),
+                "--java-options",
+                "-Xmx2g",
+            )
+
+        inputs.dir(jreImageDir)
+        inputs.dir(jpackageInputDir)
+        outputs.dir(jpackageOutputParent)
+    }

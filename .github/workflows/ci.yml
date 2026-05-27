@@ -25,23 +25,32 @@ jobs:
       - uses: crate-ci/typos@master
 
   check:
-    name: check (JVM)
+    name: check (JVM + frontend)
     runs-on: ubuntu-latest
     permissions:
       contents: read
       actions: write  # upload-artifact
     steps:
       - uses: actions/checkout@v6
-      - uses: graalvm/setup-graalvm@v1
+      - uses: actions/setup-java@v4
         with:
           java-version: '25'
-          distribution: 'graalvm-community'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          distribution: 'liberica'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: corepack enable
       # setup-gradle handles caches + writes a per-job Build dashboard to the run summary.
       - uses: gradle/actions/setup-gradle@v4
-      - name: Gradle check (test + spotless + errorprone + nullaway + jacoco)
+      - name: Gradle check (test + spotless + errorprone + nullaway + spotbugs + jacoco + frontend build)
         run: ./gradlew check --no-daemon
-      - name: Upload test reports
+      - name: Frontend Biome lint (.ts/.js/.json)
+        working-directory: frontend
+        run: corepack pnpm run biome:check
+      - name: Frontend type check + svelte-check
+        working-directory: frontend
+        run: corepack pnpm run check
+      - name: Upload test + SpotBugs reports
         if: always()
         uses: actions/upload-artifact@v7
         with:
@@ -49,27 +58,24 @@ jobs:
           path: |
             build/reports/tests/test
             build/reports/jacoco/test/html
+            build/reports/spotbugs
           if-no-files-found: ignore
 
-  # Linux native build + full smoke (real PDF conversion through CLI and Web)
-  # uses Liberica NIK via Docker so AWT/font subsystems work out of the box.
-  # NOTE: job name keeps the legacy `native-image (ubuntu-latest)` so branch
-  # protection's required-status-checks list stays stable across this refactor.
-  native-linux:
-    name: native-image (ubuntu-latest)
+  # Linux app-image build runs inside the dev container so the BellSoft apt repo
+  # provisioning (Liberica Full Edition with jmods) is fully reproducible. The
+  # CLI smoke verifies that PDFBox + AWT actually convert a real PDF end to end.
+  package-linux:
+    name: jpackage (ubuntu-latest)
     needs: check
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      actions: write  # upload-artifact
-    # Build the dev container with the runner's UID/GID so the `dev` user
-    # inside the container can write into the bind-mounted /workspace
-    # (otherwise Gradle fails creating /workspace/.gradle/configuration-cache).
+      actions: write
     env:
       DEV_UID: 1001
       DEV_GID: 1001
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Resolve runner UID/GID
         run: |
           echo "DEV_UID=$(id -u)" >> "$GITHUB_ENV"
@@ -87,67 +93,33 @@ jobs:
           build-args: |
             DEV_UID=${{ env.DEV_UID }}
             DEV_GID=${{ env.DEV_GID }}
-      - name: Native compile via Docker
-        run: docker compose run --rm dev ./gradlew nativeCompile createSamplePdf --no-daemon
-      - name: Native CLI smoke (real PDF conversion)
+      - name: Build app-image (jlink + jpackage) via Docker
+        run: docker compose run --rm dev ./gradlew jpackageImage createSamplePdf --no-daemon
+      - name: CLI smoke — real PDF conversion through the launcher
         run: |
-          docker compose run --rm dev bash -c '
-            ./build/native/nativeCompile/tate-yoko-pdf \
-              build/test-data/sample.pdf \
-              -o build/test-data/native-out.pdf \
-            && test -s build/test-data/native-out.pdf
-          '
-          file build/test-data/native-out.pdf | grep -q PDF
-      - name: Native Web smoke (upload → download)
+          docker compose run --rm dev ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
+            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
+          docker compose run --rm dev grep -q %PDF build/test-data/jpackage-out.pdf
+      - name: Package app-image as zip
         run: |
-          docker compose --profile web-native up -d web-native
-          for i in $(seq 1 30); do
-            if curl -fsS http://127.0.0.1:8080/health/live > /dev/null; then break; fi
-            sleep 1
-          done
-          curl -fsS http://127.0.0.1:8080/health/live  | grep -F '"status":"UP"'
-          curl -fsS http://127.0.0.1:8080/health/ready | grep -F '"status":"UP"'
-          REDIRECT=$(curl -sS -o /dev/null -w "%{redirect_url}" \
-            -F "pdf=@build/test-data/sample.pdf;type=application/pdf" \
-            http://127.0.0.1:8080/jobs)
-          JOB_ID=$(echo "$REDIRECT" | grep -oE '[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}')
-          test -n "$JOB_ID"
-          for i in $(seq 1 30); do
-            STATUS=$(curl -sS -L -o /dev/null -w "%{http_code}" \
-              "http://127.0.0.1:8080/jobs/$JOB_ID/result")
-            if [ "$STATUS" = "200" ]; then break; fi
-            sleep 1
-          done
-          curl -fsS -o /tmp/web-out.pdf "http://127.0.0.1:8080/jobs/$JOB_ID/download"
-          file /tmp/web-out.pdf | grep -q PDF
-          # error path: invalid UUID
-          curl -sS -o /tmp/err.html "http://127.0.0.1:8080/jobs/bad/progress"
-          grep -q JOB_NOT_FOUND /tmp/err.html
-      - name: Collect container logs on failure
-        if: failure()
-        run: docker compose logs web-native || true
-      - name: Stop web-native
-        if: always()
-        run: docker compose --profile web-native down web-native || true
-      - name: Upload native binary
-        uses: actions/upload-artifact@v5
+          cd build/dist-jpackage
+          zip -r ../tate-yoko-pdf-linux.zip tate-yoko-pdf
+      - name: Upload tate-yoko-pdf-linux.zip
+        uses: actions/upload-artifact@v7
         with:
           name: tate-yoko-pdf-linux
-          path: |
-            build/native/nativeCompile/tate-yoko-pdf
-            build/native/nativeCompile/*.so
-          if-no-files-found: ignore
+          path: build/tate-yoko-pdf-linux.zip
+          if-no-files-found: error
 
-  # macOS / Windows native-image builds use Liberica NIK (same vendor & layout
-  # as the dev container's `bellsoft/liberica-native-image-kit-container`), so
-  # the AWT/font subsystems work without the GraalVM CE workarounds and the
-  # compile is materially faster on macOS (the previous critical-path bottleneck).
-  native-other:
-    name: native-image (${{ matrix.os }})
+  # macOS and Windows app-images are built directly on the GitHub-hosted runner
+  # because jpackage produces OS-native launchers (Contents/MacOS/<name> on
+  # macOS, <name>.exe on Windows) that can only be created on the matching host.
+  package-other:
+    name: jpackage (${{ matrix.os }})
     needs: check
     permissions:
       contents: read
-      actions: write  # upload-artifact
+      actions: write
     strategy:
       fail-fast: false
       matrix:
@@ -155,39 +127,57 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      # Persist the ~150 MB Liberica NIK install across runs; setup-graalvm
-      # detects the populated tool-cache and skips the download.
-      - name: Cache Liberica NIK install
-        uses: actions/cache@v4
-        with:
-          path: ${{ runner.tool_cache }}/bellsoft-liberica-vm-*
-          key: liberica-${{ runner.os }}-${{ runner.arch }}-25
-          restore-keys: |
-            liberica-${{ runner.os }}-${{ runner.arch }}-
-      - uses: graalvm/setup-graalvm@v1
+      - uses: actions/setup-java@v4
         with:
           java-version: '25'
           distribution: 'liberica'
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Enable corepack
+        run: corepack enable
       - uses: gradle/actions/setup-gradle@v4
-      - name: Native compile
-        run: ./gradlew nativeCompile --no-daemon
-      - name: Upload native binary
+      - name: Build app-image
+        run: ./gradlew jpackageImage createSamplePdf --no-daemon
+      - name: CLI smoke (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          ./build/dist-jpackage/tate-yoko-pdf.app/Contents/MacOS/tate-yoko-pdf \
+            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
+          grep -q %PDF build/test-data/jpackage-out.pdf
+      - name: CLI smoke (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          & ".\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
+            build\test-data\sample.pdf -o build\test-data\jpackage-out.pdf
+          $bytes = [System.IO.File]::ReadAllBytes("build/test-data/jpackage-out.pdf")
+          $head = [System.Text.Encoding]::ASCII.GetString($bytes[0..3])
+          if ($head -ne '%PDF') { throw "Output is not a PDF: prefix=$head" }
+      - name: Package app-image as zip (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          cd build/dist-jpackage
+          zip -ry ../tate-yoko-pdf-${{ matrix.os }}.zip tate-yoko-pdf.app
+      - name: Package app-image as zip (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Compress-Archive -Path build/dist-jpackage/tate-yoko-pdf `
+            -DestinationPath build/tate-yoko-pdf-${{ matrix.os }}.zip
+      - name: Upload tate-yoko-pdf-${{ matrix.os }}.zip
         uses: actions/upload-artifact@v7
         with:
           name: tate-yoko-pdf-${{ matrix.os }}
-          path: |
-            build/native/nativeCompile/tate-yoko-pdf*
-            build/native/nativeCompile/*.dll
-            build/native/nativeCompile/*.dylib
-          if-no-files-found: ignore
+          path: build/tate-yoko-pdf-${{ matrix.os }}.zip
+          if-no-files-found: error
 
   # Surfaces recent main-branch CI wall-clock times in the run summary so any
   # regression is visible without external dashboards. See docs/perf-baseline.md
   # for the rolling history.
   perf-report:
     name: perf report
-    needs: [typos, check, native-linux, native-other]
+    needs: [typos, check, package-linux, package-other]
     if: always()
     runs-on: ubuntu-latest
     permissions:

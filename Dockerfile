@@ -1,14 +1,29 @@
-# Liberica NIK Full ships strong AWT/Swing support out of the box, which the
-# stock GraalVM CE image does not — required because PDFBox' PDDocument static
-# initialiser pulls in java.awt.image.Raster/ColorModel and the matching JNI libs.
-ARG GRAALVM_IMAGE=bellsoft/liberica-native-image-kit-container:jdk-25-nik-25-glibc
+# Debian bookworm slim + Liberica JDK 25 Full Edition (from BellSoft's apt repo).
+# We need the **Full** flavour because it ships the `jmods/` directory, which
+# jlink/jpackage consume to assemble the bundled JRE for the app-image
+# distribution. The default `liberica-openjdk-debian:25` Docker image is Lite
+# (no jmods) and therefore unsuitable as a build base for jpackage. Node.js
+# (NodeSource LTS 22) drives the SvelteKit frontend build.
+FROM debian:bookworm-slim AS dev
 
-FROM ${GRAALVM_IMAGE} AS dev
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      bash findutils tar gzip git unzip procps curl ca-certificates gnupg \
+      fontconfig libfreetype6 fonts-dejavu \
+      binutils \
+ && curl -fsSL https://download.bell-sw.com/pki/GPG-KEY-bellsoft \
+      | gpg --dearmor -o /usr/share/keyrings/bellsoft.gpg \
+ && echo "deb [signed-by=/usr/share/keyrings/bellsoft.gpg] https://apt.bell-sw.com/ stable main" \
+      > /etc/apt/sources.list.d/bellsoft.list \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends bellsoft-java25-full \
+ && curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+ && apt-get install -y --no-install-recommends nodejs \
+ && corepack enable \
+ && rm -rf /var/lib/apt/lists/*
 
-# Alpaquita Linux ships apk; install AWT/font runtime deps + dev tooling.
-RUN apk add --no-cache \
-      bash findutils tar gzip git unzip which procps shadow curl \
-      fontconfig freetype ttf-dejavu
+ENV JAVA_HOME=/usr/lib/jvm/bellsoft-java25-full-amd64
+ENV PATH=$JAVA_HOME/bin:$PATH
 
 ARG TYPOS_VERSION=1.46.3
 RUN curl -fsSL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
@@ -34,35 +49,3 @@ USER dev
 
 ENTRYPOINT []
 CMD ["bash"]
-
-
-FROM ${GRAALVM_IMAGE} AS builder
-
-RUN apk add --no-cache bash findutils tar gzip unzip fontconfig freetype
-
-WORKDIR /build
-COPY --chown=root:root gradle ./gradle
-COPY --chown=root:root gradlew settings.gradle.kts build.gradle.kts ./
-RUN ./gradlew --no-daemon dependencies > /dev/null 2>&1 || true
-
-COPY --chown=root:root src ./src
-ENTRYPOINT []
-RUN ./gradlew --no-daemon nativeCompile
-
-
-# Use the matching BellSoft slim runtime so AWT/font libs match the build env.
-FROM bellsoft/liberica-runtime-container:jdk-25-slim-glibc AS runtime
-
-# Font subsystem must be installed even in the slim runtime image.
-RUN apk add --no-cache fontconfig freetype ttf-dejavu ca-certificates
-
-# Native binary + JDK shim libraries (libawt.so / libfontmanager.so / liblcms.so / ...)
-# emitted by `gradle nativeCompile`. They must live next to the executable; we set
-# LD_LIBRARY_PATH in the launcher so the dynamic loader actually finds them.
-COPY --from=builder /build/build/native/nativeCompile/ /opt/tate-yoko/
-
-RUN printf '#!/bin/sh\nexec env LD_LIBRARY_PATH=/opt/tate-yoko /opt/tate-yoko/tate-yoko-pdf "$@"\n' \
-      > /usr/local/bin/tate-yoko-pdf \
- && chmod +x /usr/local/bin/tate-yoko-pdf
-
-ENTRYPOINT ["/usr/local/bin/tate-yoko-pdf"]

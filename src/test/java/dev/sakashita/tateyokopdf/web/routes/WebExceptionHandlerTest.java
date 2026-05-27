@@ -5,8 +5,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
-import gg.jte.ContentType;
-import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
 import io.javalin.testtools.JavalinTest;
 import java.util.List;
@@ -15,9 +13,7 @@ import org.junit.jupiter.api.Test;
 final class WebExceptionHandlerTest {
 
   private static Javalin app() {
-    TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
-    ViewRenderer renderer = new ViewRenderer(engine);
-    WebExceptionHandler handler = new WebExceptionHandler(renderer);
+    WebExceptionHandler handler = new WebExceptionHandler();
     return Javalin.create(
         config -> {
           config.routes.before(RequestTracingFilter::before);
@@ -49,17 +45,23 @@ final class WebExceptionHandlerTest {
     return (values == null || values.isEmpty()) ? "" : values.get(0);
   }
 
+  private static String firstHeader(io.javalin.testtools.Response resp, String name) {
+    List<String> values = resp.headers().get(name);
+    return (values == null || values.isEmpty()) ? "" : values.get(0);
+  }
+
   @Test
-  void domainExceptionRendersErrorPageWithKindAndTraceId() {
+  void domainExceptionRendersJsonWithKindAndTraceId() {
     JavalinTest.test(
         app(),
         (server, client) -> {
           var resp = client.get("/boom-domain");
           assertThat(resp.code()).isEqualTo(400);
+          assertThat(firstHeader(resp, "Content-Type")).startsWith("application/json");
           String trace = firstTraceIdHeader(resp);
           assertThat(trace).matches("^[0-9a-f]{32}$");
           String body = resp.body().string();
-          assertThat(body).contains("PDF_PASSWORD_PROTECTED");
+          assertThat(body).contains("\"kind\":\"PDF_PASSWORD_PROTECTED\"");
           assertThat(body).contains(trace);
         });
   }
@@ -71,7 +73,7 @@ final class WebExceptionHandlerTest {
         (server, client) -> {
           var resp = client.get("/boom-runtime");
           assertThat(resp.code()).isEqualTo(500);
-          assertThat(resp.body().string()).contains("INTERNAL");
+          assertThat(resp.body().string()).contains("\"kind\":\"INTERNAL\"");
         });
   }
 
@@ -82,18 +84,18 @@ final class WebExceptionHandlerTest {
         (server, client) -> {
           var resp = client.get("/boom-iae");
           assertThat(resp.code()).isEqualTo(400);
-          assertThat(resp.body().string()).contains("INVALID_PARAMETER");
+          assertThat(resp.body().string()).contains("\"kind\":\"INVALID_PARAMETER\"");
         });
   }
 
   @Test
-  void unmatchedRouteRendersJobNotFoundPage() {
+  void unmatchedRouteRendersJobNotFoundJson() {
     JavalinTest.test(
         app(),
         (server, client) -> {
           var resp = client.get("/no-such-route");
           assertThat(resp.code()).isEqualTo(404);
-          assertThat(resp.body().string()).contains("JOB_NOT_FOUND");
+          assertThat(resp.body().string()).contains("\"kind\":\"JOB_NOT_FOUND\"");
         });
   }
 }
