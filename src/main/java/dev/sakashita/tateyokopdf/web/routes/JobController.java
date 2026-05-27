@@ -9,11 +9,11 @@ import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
 import dev.sakashita.tateyokopdf.observability.SafeExecutor;
 import dev.sakashita.tateyokopdf.web.job.Job;
+import dev.sakashita.tateyokopdf.web.job.JobJsonMapping;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
 import dev.sakashita.tateyokopdf.web.job.WsCloseCodes;
-import dev.sakashita.tateyokopdf.web.job.WsFrames;
 import dev.sakashita.tateyokopdf.web.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.http.Context;
@@ -103,13 +103,13 @@ public final class JobController {
     try {
       id = UUID.fromString(ctx.pathParam("id"));
     } catch (IllegalArgumentException e) {
-      ctx.send(WsFrames.error(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
+      ctx.send(JobJsonMapping.failedFrame(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
       ctx.closeSession(WsCloseCodes.JOB_NOT_FOUND, "Job not found");
       return;
     }
     WebProgressListener listener = registry.listener(id).orElse(null);
     if (listener == null) {
-      ctx.send(WsFrames.error(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
+      ctx.send(JobJsonMapping.failedFrame(ErrorKind.JOB_NOT_FOUND, "ジョブが見つかりません", "-"));
       ctx.closeSession(WsCloseCodes.JOB_NOT_FOUND, "Job not found");
       return;
     }
@@ -130,7 +130,7 @@ public final class JobController {
         if (event == null) {
           continue;
         }
-        ctx.send(WsFrames.progress(event));
+        ctx.send(JobJsonMapping.toJson(event));
         if (event instanceof ProgressEvent.Completed) {
           ctx.closeSession(WsCloseCodes.NORMAL, "done");
           break;
@@ -145,7 +145,7 @@ public final class JobController {
     } catch (RuntimeException e) {
       log.debug("WS pump for {} aborted: {}", id, e.getMessage());
       try {
-        ctx.send(WsFrames.error(ErrorKind.INTERNAL, "WS 内部エラー", "-"));
+        ctx.send(JobJsonMapping.failedFrame(ErrorKind.INTERNAL, "WS 内部エラー", "-"));
         ctx.closeSession(WsCloseCodes.INTERNAL, "internal");
       } catch (RuntimeException ignored) {
         // best-effort

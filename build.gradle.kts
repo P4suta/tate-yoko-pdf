@@ -58,6 +58,7 @@ dependencies {
     implementation("info.picocli:picocli:4.7.7")
     implementation("ch.qos.logback:logback-classic:1.5.32")
     implementation("io.javalin:javalin:7.2.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
 
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
