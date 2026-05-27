@@ -10,7 +10,9 @@ import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
 import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import dev.sakashita.tateyokopdf.web.observability.HealthController;
 import dev.sakashita.tateyokopdf.web.observability.RequestTracingFilter;
+import dev.sakashita.tateyokopdf.web.routes.DownloadHandler;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
+import dev.sakashita.tateyokopdf.web.routes.JobFactory;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.Javalin;
@@ -63,7 +65,13 @@ public final class WebLauncher {
               return t;
             });
 
-    JobController jobs = new JobController(registry, workers, new UploadValidator());
+    JobController jobs =
+        new JobController(
+            registry,
+            workers,
+            new UploadValidator(),
+            new JobFactory(registry),
+            new DownloadHandler(registry));
     WebExceptionHandler exHandler = new WebExceptionHandler();
     HealthController health =
         new HealthController(new HealthCheck(registry::size, (ThreadPoolExecutor) workers));

@@ -5,7 +5,9 @@ import dev.sakashita.tateyokopdf.web.WebLauncher;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
 import dev.sakashita.tateyokopdf.web.observability.HealthController;
+import dev.sakashita.tateyokopdf.web.routes.DownloadHandler;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
+import dev.sakashita.tateyokopdf.web.routes.JobFactory;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.Javalin;
@@ -37,7 +39,13 @@ public final class WebTestHarness {
               t.setDaemon(true);
               return t;
             });
-    JobController jobs = new JobController(registry, workers, new UploadValidator());
+    JobController jobs =
+        new JobController(
+            registry,
+            workers,
+            new UploadValidator(),
+            new JobFactory(registry),
+            new DownloadHandler(registry));
     IdleShutdown idle =
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
     WebExceptionHandler exHandler = new WebExceptionHandler();
