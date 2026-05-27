@@ -26,9 +26,9 @@ final class HealthControllerTest {
   private static Javalin app(HealthController health) {
     return Javalin.create(
         config -> {
-          config.routes.get("/health", health::health);
-          config.routes.get("/health/live", health::liveness);
-          config.routes.get("/health/ready", health::readiness);
+          config.routes.get("/api/health", health::health);
+          config.routes.get("/api/health/live", health::liveness);
+          config.routes.get("/api/health/ready", health::readiness);
         });
   }
 
@@ -43,7 +43,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(upController(tmp)),
         (server, client) -> {
-          var resp = client.get("/health/live");
+          var resp = client.get("/api/health/live");
           assertThat(resp.code()).isEqualTo(200);
           assertThat(resp.body().string()).contains("\"status\":\"UP\"");
         });
@@ -54,7 +54,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(upController(tmp)),
         (server, client) -> {
-          var resp = client.get("/health/ready");
+          var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(200);
           String body = resp.body().string();
           assertThat(body).contains("\"status\":\"UP\"");
@@ -67,7 +67,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(upController(tmp)),
         (server, client) -> {
-          var resp = client.get("/health");
+          var resp = client.get("/api/health");
           assertThat(resp.code()).isEqualTo(200);
           assertThat(resp.body().string()).contains("workDirWritable");
         });
@@ -83,7 +83,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(controller),
         (server, client) -> {
-          var resp = client.get("/health/ready");
+          var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(503);
           assertThat(resp.body().string()).contains("\"status\":\"DOWN\"");
         });
@@ -95,7 +95,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(upController(tmp)),
         (server, client) -> {
-          var resp = client.get("/health/live");
+          var resp = client.get("/api/health/live");
           assertThat(resp.code()).isEqualTo(503);
           assertThat(resp.body().string()).contains("SHUTTING_DOWN");
         });
@@ -107,7 +107,7 @@ final class HealthControllerTest {
     JavalinTest.test(
         app(upController(tmp)),
         (server, client) -> {
-          var resp = client.get("/health/ready");
+          var resp = client.get("/api/health/ready");
           assertThat(resp.code()).isEqualTo(503);
           assertThat(resp.body().string()).contains("SHUTTING_DOWN");
         });

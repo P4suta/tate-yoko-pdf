@@ -16,12 +16,6 @@ public final class WebExceptionHandler {
   private static final Logger log = LoggerFactory.getLogger(WebExceptionHandler.class);
   private static final String ATTR_HANDLED = "tate-yoko.errorHandled";
 
-  private final ViewRenderer renderer;
-
-  public WebExceptionHandler(ViewRenderer renderer) {
-    this.renderer = renderer;
-  }
-
   public void handleDomain(Exception e, Context ctx) {
     render(e, ctx);
   }
@@ -52,7 +46,16 @@ public final class WebExceptionHandler {
     ExceptionMapper.Mapping mapping = ExceptionMapper.map(t);
     String traceId = traceIdOf(ctx);
     logError(mapping, traceId, t);
-    renderer.renderError(ctx, mapping, traceId);
+    ctx.status(mapping.httpStatus());
+    ctx.contentType("application/json");
+    ctx.result(
+        "{\"kind\":\""
+            + mapping.kind().name()
+            + "\",\"message\":\""
+            + escape(mapping.userMessage())
+            + "\",\"traceId\":\""
+            + escape(traceId)
+            + "\"}");
     ctx.attribute(ATTR_HANDLED, true);
   }
 
@@ -68,6 +71,10 @@ public final class WebExceptionHandler {
     }
     String current = TraceContext.currentTraceId();
     return current != null ? current : "-";
+  }
+
+  private static String escape(String s) {
+    return s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\r", "");
   }
 
   private static void logError(

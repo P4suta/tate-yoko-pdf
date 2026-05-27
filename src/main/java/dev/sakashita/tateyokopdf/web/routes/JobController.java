@@ -14,7 +14,6 @@ import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
-import dev.sakashita.tateyokopdf.web.job.JobStatus;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
 import dev.sakashita.tateyokopdf.web.job.WsCloseCodes;
@@ -46,17 +45,12 @@ public final class JobController {
   private static final long WS_POLL_SECONDS = 1L;
 
   private final JobRegistry registry;
-  private final ViewRenderer renderer;
   private final ExecutorService executor;
   private final UploadValidator uploadValidator;
 
   public JobController(
-      JobRegistry registry,
-      ViewRenderer renderer,
-      ExecutorService executor,
-      UploadValidator uploadValidator) {
+      JobRegistry registry, ExecutorService executor, UploadValidator uploadValidator) {
     this.registry = registry;
-    this.renderer = renderer;
     this.executor = executor;
     this.uploadValidator = uploadValidator;
   }
@@ -100,28 +94,14 @@ public final class JobController {
         new SpreadService(
             new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), strategy, listener);
 
-    var ignored =
-        executor.submit(
-            SafeExecutor.guarded(
-                () -> service.execute(options), listener::fail, "job=" + job.id()));
+    // Fire-and-forget: the worker reports outcomes through `listener`; the
+    // Future returned by submit() is intentionally discarded.
+    executor.execute(
+        SafeExecutor.guarded(() -> service.execute(options), listener::fail, "job=" + job.id()));
 
-    ctx.redirect("/jobs/" + job.id() + "/progress");
-  }
-
-  public void showProgress(Context ctx) {
-    // progress.jte and result.jte each declare a single `@param Job job`, which jte
-    // binds positionally — passing a Map here would be reflected as a type mismatch.
-    Job job = lookup(ctx);
-    renderer.renderHtml(ctx, "progress.jte", job);
-  }
-
-  public void showResult(Context ctx) {
-    Job job = lookup(ctx);
-    if (!(job.status() instanceof JobStatus.Completed)) {
-      ctx.redirect("/jobs/" + job.id() + "/progress");
-      return;
-    }
-    renderer.renderHtml(ctx, "result.jte", job);
+    ctx.status(202);
+    ctx.contentType("application/json");
+    ctx.result("{\"id\":\"" + job.id() + "\"}");
   }
 
   public void onProgressWs(WsConnectContext ctx) {

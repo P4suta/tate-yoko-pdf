@@ -11,13 +11,12 @@ import dev.sakashita.tateyokopdf.web.lifecycle.SingleInstanceLock;
 import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
 import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
-import dev.sakashita.tateyokopdf.web.routes.PageController;
-import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
-import gg.jte.ContentType;
-import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
+import io.javalin.http.staticfiles.Location;
+import java.io.IOException;
+import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.time.Duration;
@@ -54,8 +53,6 @@ public final class WebLauncher {
     String bind = System.getenv().getOrDefault("TATE_YOKO_BIND", "127.0.0.1");
     int port = resolvePort();
 
-    TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
-    ViewRenderer renderer = new ViewRenderer(engine);
     JobRegistry registry = new JobRegistry();
     ExecutorService workers =
         Executors.newFixedThreadPool(
@@ -66,9 +63,8 @@ public final class WebLauncher {
               return t;
             });
 
-    PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
-    WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
+    JobController jobs = new JobController(registry, workers, new UploadValidator());
+    WebExceptionHandler exHandler = new WebExceptionHandler();
     HealthController health =
         new HealthController(new HealthCheck(registry, (ThreadPoolExecutor) workers));
 
@@ -84,8 +80,7 @@ public final class WebLauncher {
             registry::hasRunningJobs);
     idle.start();
 
-    Javalin app =
-        buildJavalin(pages, jobs, idle, exHandler, health, MAX_UPLOAD_BYTES).start(bind, port);
+    Javalin app = buildJavalin(jobs, idle, exHandler, health, MAX_UPLOAD_BYTES).start(bind, port);
     int actualPort = app.port();
     lock.claim(actualPort);
 
@@ -126,7 +121,6 @@ public final class WebLauncher {
   }
 
   public static Javalin buildJavalin(
-      PageController pages,
       JobController jobs,
       IdleShutdown idle,
       WebExceptionHandler exHandler,
@@ -136,17 +130,22 @@ public final class WebLauncher {
         config -> {
           config.startup.showJavalinBanner = false;
           config.http.maxRequestSize = maxUploadBytes;
+          // SvelteKit static assets (adapter-static) are staged into the JAR under
+          // /static by the buildFrontend Gradle task; serve them from the root.
+          config.staticFiles.add(
+              it -> {
+                it.hostedPath = "/";
+                it.directory = "/static";
+                it.location = Location.CLASSPATH;
+              });
           config.routes.before(RequestTracingFilter::before);
           config.routes.after(RequestTracingFilter::after);
-          config.routes.get("/health", health::health);
-          config.routes.get("/health/live", health::liveness);
-          config.routes.get("/health/ready", health::readiness);
-          config.routes.get("/", pages::index);
-          config.routes.post("/jobs", jobs::submit);
-          config.routes.get("/jobs/{id}/progress", jobs::showProgress);
-          config.routes.get("/jobs/{id}/result", jobs::showResult);
-          config.routes.get("/jobs/{id}/download", jobs::download);
-          config.routes.ws("/jobs/{id}/ws", ws -> ws.onConnect(jobs::onProgressWs));
+          config.routes.get("/api/health", health::health);
+          config.routes.get("/api/health/live", health::liveness);
+          config.routes.get("/api/health/ready", health::readiness);
+          config.routes.post("/api/jobs", jobs::submit);
+          config.routes.get("/api/jobs/{id}/download", jobs::download);
+          config.routes.ws("/ws/jobs/{id}", ws -> ws.onConnect(jobs::onProgressWs));
           config.routes.ws(
               "/ws/keepalive",
               ws -> {
@@ -155,9 +154,37 @@ public final class WebLauncher {
               });
           config.routes.exception(SpreadException.class, exHandler::handleDomain);
           config.routes.exception(Exception.class, exHandler::handleUnknown);
-          config.routes.error(404, exHandler::handleNotFound);
+          // Unmatched routes: API/WS paths get a JSON 404 from the exception handler;
+          // anything else falls back to the SvelteKit SPA shell so client-side
+          // routing can resolve it (e.g. /jobs/{id}).
+          config.routes.error(404, ctx -> handleNotFound(ctx, exHandler));
           config.routes.error(413, exHandler::handleTooLarge);
         });
+  }
+
+  private static void handleNotFound(io.javalin.http.Context ctx, WebExceptionHandler exHandler) {
+    String path = ctx.path();
+    if (path.startsWith("/api/") || path.startsWith("/ws/")) {
+      exHandler.handleNotFound(ctx);
+      return;
+    }
+    serveSpaShell(ctx);
+  }
+
+  private static void serveSpaShell(io.javalin.http.Context ctx) {
+    try (InputStream in = WebLauncher.class.getResourceAsStream("/static/index.html")) {
+      if (in == null) {
+        ctx.status(500);
+        ctx.result("SPA shell missing from classpath");
+        return;
+      }
+      ctx.status(200);
+      ctx.contentType("text/html; charset=utf-8");
+      ctx.result(in.readAllBytes());
+    } catch (IOException e) {
+      ctx.status(500);
+      ctx.result("Failed to serve SPA shell: " + e.getMessage());
+    }
   }
 
   private static int resolvePort() {

@@ -1,29 +1,22 @@
-# Use the host user's UID/GID inside the dev container
+# tate-yoko-pdf — task runner.
+# Common verbs: `just check` / `just smoke` / `just web` / `just shell`.
+# Groups are surfaced by `just --list`. lefthook bypasses high-level recipes
+# and calls `just dev-run …` directly, so refactors here do not break hooks.
+
+set shell := ["bash", "-cu"]
 export DEV_UID := `id -u`
 export DEV_GID := `id -g`
 
-set shell := ["bash", "-cu"]
-
-# Show available recipes
+# Show available recipes grouped by section.
 default:
     @just --list
 
-# Start a long-lived dev container (keeps the Gradle daemon warm across commands)
-dev-up:
-    docker compose --profile dev up -d dev-daemon
-    @echo "→ dev-daemon up. Run 'just dev-down' to stop."
+# ─── Composition primitives ──────────────────────────────────────────────────
+# Internal helpers other recipes call. They prefer the long-lived `dev-daemon`
+# (started by `just dev-up`) and fall back to a one-shot container when it's
+# not running. lefthook also calls `dev-run` directly — keep it public.
 
-# Stop the long-lived dev container.
-dev-down:
-    -docker compose --profile dev down dev-daemon --remove-orphans
-
-# Run an arbitrary command inside dev-daemon (requires `just dev-up`).
-exec *cmd="bash":
-    docker compose exec dev-daemon {{cmd}}
-
-# Dispatch into dev-daemon if running, else a one-shot `docker compose run --rm dev`.
-# Also the integration point for lefthook hooks, so they pick up `dev-daemon` when
-# the user has run `just dev-up`.
+# Run an arbitrary command inside the dev container (lefthook entry point).
 dev-run *args:
     @if [ -n "$(docker ps -q -f name=tate-yoko-pdf-dev-daemon)" ]; then \
         docker compose exec -T dev-daemon {{args}}; \
@@ -31,7 +24,45 @@ dev-run *args:
         docker compose run --rm dev {{args}}; \
     fi
 
-# Open an interactive shell in the dev container
+# Run ./gradlew inside the dev container.
+[private]
+gradle *args:
+    @just dev-run ./gradlew {{args}}
+
+
+
+# Run pnpm (corepack-managed) inside the dev container, in frontend/.
+# Run pnpm (corepack-managed) inside the dev container with cwd = /workspace/frontend.
+# We can't compose via `dev-run bash -c '…'` because just's `*args` expansion
+# drops shell quoting — passing `-w` to docker is the safe equivalent.
+[private]
+pnpm *args:
+    @if [ -n "$(docker ps -q -f name=tate-yoko-pdf-dev-daemon)" ]; then \
+        docker compose exec -T -w /workspace/frontend dev-daemon corepack pnpm {{args}}; \
+    else \
+        docker compose run --rm -w /workspace/frontend dev corepack pnpm {{args}}; \
+    fi
+
+# ─── Dev container ───────────────────────────────────────────────────────────
+
+# Start the long-lived dev-daemon (keeps Gradle daemon + pnpm cache warm).
+[group('dev')]
+dev-up:
+    docker compose --profile dev up -d dev-daemon
+    @echo "→ dev-daemon up. Run 'just dev-down' to stop."
+
+# Stop the long-lived dev-daemon.
+[group('dev')]
+dev-down:
+    -docker compose --profile dev down dev-daemon --remove-orphans
+
+# Run an arbitrary command in the dev container (requires `just dev-up`).
+[group('dev')]
+exec *cmd="bash":
+    docker compose exec dev-daemon {{cmd}}
+
+# Open an interactive shell in the dev container.
+[group('dev')]
 shell:
     @if [ -n "$(docker ps -q -f name=tate-yoko-pdf-dev-daemon)" ]; then \
         docker compose exec -it dev-daemon bash; \
@@ -39,94 +70,117 @@ shell:
         docker compose run --rm dev bash; \
     fi
 
-# Run the full check (test + spotless + errorprone + nullaway + jacoco)
-check:
-    @just dev-run ./gradlew check
+# Pre-pull base image + build dev image + warm Gradle cache (first-run).
+[group('dev')]
+warmup:
+    docker compose build dev
+    @just gradle --quiet help
+    @echo "→ dev image built, Gradle cache primed."
 
-# Run tests only
+# ─── Quality ─────────────────────────────────────────────────────────────────
+
+# Full check (backend: test + spotless + errorprone + nullaway + spotbugs + jacoco, then frontend lint).
+[group('quality')]
+check: && lint
+    @just gradle check
+
+# Backend tests only.
+[group('quality')]
 test:
-    @just dev-run ./gradlew test
+    @just gradle test
 
-# Apply spotless formatting
+# Frontend Biome lint + svelte-check.
+[group('quality')]
+lint:
+    @just pnpm run biome:check
+    @just pnpm run check
+
+# Auto-format Java (Spotless) + .ts/.js/.json (Biome) + .svelte (Prettier).
+[group('quality')]
 format:
-    @just dev-run ./gradlew spotlessApply
+    @just gradle spotlessApply
+    @just pnpm run biome:format
+    @just pnpm run format
 
-# Build the fat shadowJar
+# Auto-fix typos across the repo.
+[group('quality')]
+typos-fix:
+    @just dev-run typos --write-changes
+
+# Report typos without auto-fixing (pre-push gate).
+[group('quality')]
+typos:
+    @just dev-run typos
+
+# ─── Build & distribution ────────────────────────────────────────────────────
+
+# Build the fat shadowJar at build/libs/tate-yoko-pdf-all.jar.
+[group('build')]
 shadow:
-    @just dev-run ./gradlew shadowJar
+    @just gradle shadowJar
 
-# Build the native-image binary
-native:
-    @just dev-run ./gradlew nativeCompile
+# Build the jpackage app-image (bundled JRE + shadow jar) under build/dist-jpackage/.
+[group('build')]
+package:
+    @just gradle jpackageImage
 
-# Start the web app in JVM mode (background); http://127.0.0.1:8080/
+# Build the app-image and convert a sample PDF through it (asserting `%PDF` magic on the output).
+[group('build')]
+smoke: sample-pdf package
+    @just dev-run ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
+    @just dev-run grep -q %PDF build/test-data/jpackage-out.pdf
+    @echo "✓ jpackage CLI smoke passed"
+
+# Generate a 4-page sample PDF at build/test-data/sample.pdf.
+[group('build')]
+sample-pdf:
+    @just gradle createSamplePdf
+
+# Remove Gradle build outputs.
+[group('build')]
+clean:
+    @just gradle clean
+
+# ─── Serve ───────────────────────────────────────────────────────────────────
+
+# Start the web app in JVM mode (background) on http://127.0.0.1:8080/.
+[group('serve')]
 web: shadow
     docker compose --profile web up -d web
     @echo "→ http://127.0.0.1:8080/"
 
-# Start the web app as a native binary (background); http://127.0.0.1:8080/
-web-native: native
-    docker compose --profile web-native up -d web-native
-    @echo "→ http://127.0.0.1:8080/"
-
-# Stop any running web container
+# Stop the web app.
+[group('serve')]
 web-stop:
     -docker compose --profile web down web --remove-orphans
-    -docker compose --profile web-native down web-native --remove-orphans
 
-# Generate a 4-page sample PDF at build/test-data/sample.pdf
-sample-pdf:
-    @just dev-run ./gradlew createSamplePdf
+# SvelteKit dev server (Vite HMR on :5173, /api & /ws proxied to :8080).
+[group('serve')]
+frontend-dev:
+    @just pnpm run dev --host 0.0.0.0
 
-# Auto-fix typos across the repo
-typos-fix:
-    @just dev-run typos --write-changes
+# ─── Maintenance ─────────────────────────────────────────────────────────────
 
-# Report typos without auto-fixing
-typos:
-    @just dev-run typos
-
-# Remove build outputs
-clean:
-    @just dev-run ./gradlew clean
-
-# Report outdated deps (Gradle deps/plugins + Dockerfile/spotless/jacoco/security pins)
+# Report outdated deps (Gradle + Dockerfile/spotless/jacoco/security pins).
+[group('maint')]
 outdated:
-    @just dev-run ./gradlew --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
+    @just gradle --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
 
-# Pre-pull base image + build dev image + warm Gradle cache. Useful first-run / onboarding.
-warmup:
-    docker compose build dev
-    @just dev-run ./gradlew --quiet help
-    @echo "→ dev image built, Gradle cache primed."
-
-# Reproduce CI's Linux native smoke (build + CLI + web upload/download) locally.
-smoke: native
-    @just dev-run bash -c '\
-        ./build/native/nativeCompile/tate-yoko-pdf \
-            build/test-data/sample.pdf \
-            -o build/test-data/native-out.pdf \
-        && test -s build/test-data/native-out.pdf \
-        && file build/test-data/native-out.pdf | grep -q PDF \
-        && echo "✓ CLI smoke passed"'
-
-# Run JVM tests under the native-image agent to auto-generate reflect/proxy/resource config
-trace:
-    @just dev-run ./gradlew -Pagent test
-    @echo "→ Agent config written under build/agent-config/. Diff it against META-INF/native-image/."
-
-# Remove this project's Docker artifacts (containers, networks, named volumes, locally-built images).
+# Remove this project's Docker artifacts (containers, networks, volumes, images). Confirmed prompt.
+[group('maint'), confirm("Remove tate-yoko-pdf's containers / volumes / images? [y/N]")]
 docker-clean:
-    docker compose --profile dev --profile web --profile web-native down -v --remove-orphans --rmi local
+    docker compose --profile dev --profile web down -v --remove-orphans --rmi local
 
-# Show Docker disk usage (machine-wide) and this project's container/volume state.
+# Show Docker disk usage (machine-wide) and this project's state.
+[group('maint')]
 docker-status:
     docker system df
     @echo
     @echo '--- tate-yoko-pdf ---'
-    -docker compose --profile dev --profile web --profile web-native ps -a
+    -docker compose --profile dev --profile web ps -a
     docker volume ls --filter 'label=com.docker.compose.project=tate-yoko-pdf'
 
-# Launch an interactive TUI (lazydocker) to inspect machine-wide Docker state.
+# Launch lazydocker TUI for machine-wide Docker state.
+[group('maint')]
 docker-tui:
     lazydocker

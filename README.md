@@ -68,15 +68,23 @@ $ ./tate-yoko-pdf       # 引数なしで起動
 
 ## インストール
 
-各OSのネイティブ単一バイナリ（JREのインストール不要）を CI で 3 OS 並列にビルドしています。
+各OSに **JRE をバンドルした app-image**（zip 1 個・別途 Java インストール不要）を CI で 3 OS 並列にビルドしています。zip を展開して中の `bin/tate-yoko-pdf` を叩くだけで動作します。
 
 | OS | 配布物 | サイズ目安 |
 |---|---|---|
-| Linux x86_64 | `tate-yoko-pdf` （実行可能バイナリ） | ~48 MB |
-| Windows x86_64 | `tate-yoko-pdf.exe` | ~50 MB |
-| macOS | `tate-yoko-pdf` | ~55 MB |
+| Linux x86_64 | `tate-yoko-pdf-linux.zip`（展開後 `bin/tate-yoko-pdf`） | ~100 MB |
+| Windows x86_64 | `tate-yoko-pdf-windows.zip`（展開後 `tate-yoko-pdf.exe`） | ~100 MB |
+| macOS | `tate-yoko-pdf-macos.zip`（展開後 `tate-yoko-pdf.app`） | ~100 MB |
 
 最新ビルドは [Actions の最新 run](https://github.com/P4suta/tate-yoko-pdf/actions/workflows/ci.yml) → 任意の成功 run → "Artifacts" から `tate-yoko-pdf-<os>` をダウンロードしてください。
+
+### 既知の制限 (v1)
+
+- **コード署名なし**: macOS Gatekeeper / Windows SmartScreen で「開発元を確認できません」等の警告が出ます。
+  - macOS: 右クリック → 「開く」（初回のみ）、または `xattr -d com.apple.quarantine tate-yoko-pdf.app`
+  - Windows: 警告画面で「詳細情報」→「実行」
+- **起動時間**: ~500ms（GraalVM native の ~50ms より遅いが、変換処理時間に比べれば微小）。
+- **真のインストーラ (.msi/.dmg/.deb) は未対応**: zip 配布のみ。スタートメニュー統合・自動アップデート等はなし。
 
 ---
 
@@ -100,10 +108,12 @@ just check            # test + spotless + errorprone + nullaway + jacoco
 just test             # テストのみ
 just format           # spotlessApply
 just web              # JVMモードでWeb起動（http://127.0.0.1:8080/）
-just web-native       # native-imageでWeb起動
 just web-stop         # 停止
 just shadow           # shadowJar 生成
-just native           # native-image ビルド
+just package          # jpackage app-image を build/dist-jpackage/ に生成
+just frontend-dev     # SvelteKit dev server (Vite HMR on :5173, /api & /ws proxy to :8080)
+just frontend-build   # SvelteKit を静的 SPA としてビルド (frontend/build/)
+just smoke            # app-image をビルドして実 PDF 変換 smoke を回す
 just sample-pdf       # build/test-data/sample.pdf を生成
 just typos            # 誤字スキャン
 just typos-fix        # 誤字自動修正
@@ -113,15 +123,22 @@ just docker-tui       # lazydocker でマシン全体の Docker 状態を TUI �
 just docker-clean     # 本プロジェクトの Docker artifacts (container/network/named volume/image) を一掃
 ```
 
+#### 開発ループ：フロントエンドを編集する場合
+
+別ターミナルで `just web` でバックエンドを :8080 に起動した状態で `just frontend-dev` を叩くと、Vite が :5173 に立ち上がります。`/api/*` と `/ws/*` は :8080 にプロキシされるので、Svelte コンポーネントを HMR で編集しつつ Java バックエンドと連携できます。
+
 `just` を入れていない場合は `docker compose run --rm dev ./gradlew <task>` 形式でも同等。
 
 ### 開発支援ツール
 
 | ツール | 役割 |
 |---|---|
-| Spotless + google-java-format | 全Javaソースのフォーマット強制 |
-| Error Prone | コンパイラ静的解析（数百のチェック） |
-| NullAway (JSpecify mode) | null安全性検査（`@Nullable` で表現） |
+| Spotless + google-java-format | 全 Java ソースのフォーマット強制 |
+| Error Prone | コンパイラ静的解析（ソースレベル、数百のチェック） |
+| NullAway (JSpecify mode) | null 安全性検査（`@Nullable` で表現） |
+| SpotBugs (MAX effort / MEDIUM confidence) | バイトコードレベル静的解析。Error Prone / NullAway とは別レイヤーのバグ検出。`config/spotbugs/exclude.xml` に意図的設計の narrow な suppress を集約 |
+| Biome (.ts/.js/.json) | Rust 製の高速 linter + formatter。`recommended` + 厳しめの個別ルール（`useTopLevelRegex`, `noExplicitAny`, `noBarrelFile` 等） |
+| Prettier + ESLint (.svelte) | Biome が完全対応していない Svelte コンポーネントの整形・lint |
 | ben-manes versions plugin | 依存ライブラリの更新確認 |
 | JaCoCo | テストカバレッジ |
 | typos | コメント・識別子の誤字検出（自動修正） |
@@ -168,8 +185,8 @@ web/
 ├── WebLauncher            # 起動シーケンス (lock check → server start → browser open)
 ├── BrowserLauncher        # OS別ブラウザ起動 (xdg-open / open / start), AWT非依存
 ├── routes/
-│   ├── PageController     # index.jte
-│   └── JobController      # submit / progress / result / download / WebSocket
+│   ├── JobController      # /api/jobs (POST/GET download) + /ws/jobs/{id} (progress)
+│   └── WebExceptionHandler # JSON エラーレスポンス
 ├── job/
 │   ├── Job + JobStatus    # sealed: Pending / Running / Completed / Failed
 │   ├── JobRegistry        # ジョブとプログレスリスナーの管理
@@ -182,24 +199,30 @@ web/
     └── WorkDirs           # 再帰削除ヘルパー
 ```
 
+UI は別プロジェクト `frontend/` に分離した SvelteKit (Svelte 5 + TypeScript) の静的 SPA で、`@sveltejs/adapter-static` で生成された HTML/JS/CSS を Gradle の `buildFrontend` タスクが `src/main/resources/static/` 配下に同梱します。Javalin の `staticFiles` ハンドラがそれを `/` から配信し、`/api/*` `/ws/*` 以外の未マッチ GET は `index.html` にフォールバックして client-side router に委ねます。
+
 ---
 
 ## 技術スタック
 
 | カテゴリ | 技術 | バージョン |
 |---|---|---|
-| 言語 | Java | 21 (toolchain 25でビルド) |
+| 言語 (バックエンド) | Java | 21 (toolchain 25でビルド) |
+| 言語 (フロントエンド) | TypeScript | 6.x |
 | PDF操作 | Apache PDFBox | 3.0.7 |
 | CLI | picocli | 4.7.7 |
 | Web サーバ | Javalin | 7.2.2 |
-| HTML テンプレ | JTE（precompiled） | 3.2.4 |
+| フロントエンド | SvelteKit (Svelte 5 runes) + Vite + adapter-static | 2.57+ / 5.55+ / 3.x |
+| パッケージ管理 | pnpm (corepack 経由) | 11.x |
 | ロギング | SLF4J + Logback | 1.5.32 |
 | ビルド | Gradle (Kotlin DSL) | 9.5.1 |
 | Fat JAR | Shadow Plugin | 9.4.1 |
-| ネイティブ | GraalVM native-image / Liberica NIK Full (AWT 対応) | 1.1.0 / NIK 25 |
-| テスト | JUnit Jupiter / AssertJ | 6.1.0 / 3.27.7 |
+| 配布 | jlink + jpackage (Liberica JDK Full 25 同梱) | OpenJDK 25.0.3 |
+| Gradle ↔ pnpm 橋渡し | gradle-node-plugin | 7.1.0 |
+| テスト (バックエンド) | JUnit Jupiter / AssertJ / jqwik | 6.1.0 / 3.27.7 / 1.10.0 |
+| テスト (フロントエンド) | Vitest / Playwright | 4.x / 1.59+ |
 | 静的解析 | Error Prone / NullAway / JSpecify | 2.49.0 / 0.13.4 / 1.0.0 |
-| フォーマット | Spotless + google-java-format | 8.5.1 / 1.35.0 |
+| フォーマット | Spotless + google-java-format / Prettier + ESLint | 8.5.1 / 1.35.0 / 3.x / 10.x |
 | カバレッジ | JaCoCo | (Gradle 同梱) |
 
 ---
@@ -272,18 +295,19 @@ JaCoCo は層別 threshold で `check` の必須ゲート: `domain.*` 95% / `app
 
 | エンドポイント | 用途 | 200 / 503 の意味 |
 |---|---|---|
-| `GET /health/live` | プロセス生存確認 (liveness) | 200=alive、503=shutdown 中 |
-| `GET /health/ready` | 依存検査 (readiness) | 200=workDir 書込可 / disk > 100MB / executor 健全、503=どれか DOWN または shutdown 中 |
-| `GET /health` | 後方互換 (= `/health/ready`) | 同上 |
+| `GET /api/health/live` | プロセス生存確認 (liveness) | 200=alive、503=shutdown 中 |
+| `GET /api/health/ready` | 依存検査 (readiness) | 200=workDir 書込可 / disk > 100MB / executor 健全、503=どれか DOWN または shutdown 中 |
+| `GET /api/health` | 後方互換 (= `/api/health/ready`) | 同上 |
 
 disk threshold は env `TATE_YOKO_HEALTH_MIN_FREE_MB` で上書き可能 (デフォルト 100MB)。
 
-### ネイティブバイナリ (AWT / フォント)
+### 配布 (bundled JRE)
 
-PDFBox の内部実装は `java.awt.image.Raster` を経由してフォントとカラーマネジメントを扱うため、native-image には AWT/Swing 対応が必要です。本プロジェクトは [Liberica NIK Full](https://hub.docker.com/r/bellsoft/liberica-native-image-kit-container) (BellSoft の GraalVM 派生で AWT サポート強化版) を Docker 経由でビルドに使用し、runtime image には `fontconfig` / `libfreetype6` をバンドルしています (`Dockerfile`)。`just native` / `just web-native` でビルド・起動できます。
+PDFBox は内部で `java.awt.image.Raster` / `ColorModel` を経由してフォントとカラーマネジメントを扱うため AWT が必須です。以前は GraalVM native-image でビルドしていましたが、AWT は macOS/Windows での native-image 対応が不安定で、実機で動かない事例があったため、**jlink + jpackage で JRE を bundle した app-image** に切り替えました。
 
-- **Linux**: Liberica NIK で実 PDF 変換まで動作 (CI で smoke 済)
-- **macOS / Windows**: CI も Liberica NIK でビルド (`graalvm/setup-graalvm@v1` の `distribution: 'liberica'`)。AWT が同梱されるため理論上は実 PDF 変換可だが、3 OS 揃った smoke は今後の段階で追加予定。
+- **ビルドフロー**: `just package` → Gradle が `shadowJar` で fat JAR を作り、`jlink` で必要モジュールだけのトリム JRE を作成（`java.base`, `java.desktop`, `java.naming`, ..., `jdk.unsupported`）、`jpackage --type app-image` で launcher + JRE + JAR を 1 ディレクトリに同梱。
+- **dev container 要件**: ベースは Debian + **Liberica JDK Full Edition 25**（`jmods/` を含むので jlink が走る）+ NodeSource Node 22 + binutils（`jlink --strip-debug` が `objcopy` を呼ぶ）。
+- **OS 別**: Linux 上で jlink/jpackage を走らせると Linux 用 app-image しか作れません（クロスビルド非対応）。macOS/Windows 用は CI で各 OS のランナー上で同じ Gradle タスクを実行することで作られます。
 
 ---
 

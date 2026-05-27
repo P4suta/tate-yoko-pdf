@@ -6,12 +6,8 @@ import dev.sakashita.tateyokopdf.web.WebLauncher;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
-import dev.sakashita.tateyokopdf.web.routes.PageController;
-import dev.sakashita.tateyokopdf.web.routes.ViewRenderer;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
-import gg.jte.ContentType;
-import gg.jte.TemplateEngine;
 import io.javalin.Javalin;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,8 +28,6 @@ public final class WebTestHarness {
   }
 
   public static Javalin app(long uploadBytes) {
-    TemplateEngine engine = TemplateEngine.createPrecompiled(ContentType.Html);
-    ViewRenderer renderer = new ViewRenderer(engine);
     JobRegistry registry = new JobRegistry();
     ExecutorService workers =
         Executors.newFixedThreadPool(
@@ -43,14 +37,13 @@ public final class WebTestHarness {
               t.setDaemon(true);
               return t;
             });
-    PageController pages = new PageController(renderer);
-    JobController jobs = new JobController(registry, renderer, workers, new UploadValidator());
+    JobController jobs = new JobController(registry, workers, new UploadValidator());
     IdleShutdown idle =
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
-    WebExceptionHandler exHandler = new WebExceptionHandler(renderer);
+    WebExceptionHandler exHandler = new WebExceptionHandler();
     HealthController health =
         new HealthController(new HealthCheck(registry, (ThreadPoolExecutor) workers));
-    return WebLauncher.buildJavalin(pages, jobs, idle, exHandler, health, uploadBytes);
+    return WebLauncher.buildJavalin(jobs, idle, exHandler, health, uploadBytes);
   }
 
   private static final class Defaults {

@@ -39,7 +39,10 @@ public final class WebProgressListener implements ProgressListener {
       terminal = true;
     }
     for (BlockingQueue<ProgressEvent> q : subscribers) {
-      q.offer(event);
+      // Unbounded LinkedBlockingQueue#offer never refuses; the boolean return
+      // is captured to silence SpotBugs RV_RETURN_VALUE_IGNORED_BAD_PRACTICE.
+      var accepted = q.offer(event);
+      assert accepted;
     }
   }
 

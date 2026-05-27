@@ -47,3 +47,12 @@ bin/
 
 ### jqwik database (property test cache)
 .jqwik-database
+
+### Node / pnpm (SvelteKit frontend)
+node_modules/
+.pnpm-store/
+.svelte-kit/
+
+### Playwright (frontend e2e)
+test-results/
+playwright-report/

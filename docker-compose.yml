@@ -46,14 +46,6 @@ services:
     profiles: ["web"]
     command: ["java", "-jar", "build/libs/tate-yoko-pdf-all.jar"]
 
-  web-native:
-    extends:
-      service: dev
-    container_name: tate-yoko-pdf-web-native
-    profiles: ["web-native"]
-    working_dir: /workspace/build/native/nativeCompile
-    command: ["./tate-yoko-pdf"]
-
 volumes:
   gradle-cache:
     # Opt out of the host-wide `docker-prune.timer` so the Gradle cache
