@@ -33,6 +33,7 @@ plugins {
     id("com.github.ben-manes.versions") version "0.54.0"
     id("com.github.node-gradle.node") version "7.1.0"
     id("org.openrewrite.rewrite") version "7.13.0"
+    id("info.solidsoft.pitest") version "1.19.0-rc.1"
 }
 
 rewrite {
@@ -49,6 +50,40 @@ rewrite {
 
 dependencies {
     rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.16.0")
+}
+
+// ---- Pitest (mutation testing) ----------------------------------------------
+// Layered on top of JaCoCo coverage: where JaCoCo says "this line ran", Pitest
+// says "and a meaningful test actually distinguished its behaviour from a
+// trivial mutation of it". Run with `just mutation`.
+//
+// Warning-only at introduction: threshold=0 keeps the build green so the next
+// PR can read the actual kill rate per package and pick a tightening target.
+pitest {
+    pitestVersion = "1.20.2"
+    junit5PluginVersion = "1.2.3"
+    targetClasses =
+        listOf(
+            "dev.sakashita.tateyokopdf.domain.*",
+            "dev.sakashita.tateyokopdf.application.*",
+        )
+    excludedClasses =
+        listOf(
+            "dev.sakashita.tateyokopdf.tools.*",
+            "dev.sakashita.tateyokopdf.infrastructure.pdfbox.tools.*",
+        )
+    testStrengthThreshold = 0
+    mutationThreshold = 0
+    coverageThreshold = 0
+    failWhenNoMutations = false
+    timestampedReports = false
+    outputFormats = listOf("HTML", "XML")
+    jvmArgs =
+        listOf(
+            "--add-opens=java.base/java.util=ALL-UNNAMED",
+            "--add-opens=java.base/java.lang=ALL-UNNAMED",
+            "-Xshare:off",
+        )
 }
 
 group = "dev.sakashita"
