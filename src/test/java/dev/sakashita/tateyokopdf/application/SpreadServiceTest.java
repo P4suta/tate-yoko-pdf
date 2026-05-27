@@ -10,16 +10,15 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
-import dev.sakashita.tateyokopdf.domain.strategy.StandardPagination;
 import dev.sakashita.tateyokopdf.port.DocumentFactory;
 import dev.sakashita.tateyokopdf.port.PageContent;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.testfixtures.CapturingProgressListener;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -42,12 +41,11 @@ final class SpreadServiceTest {
   @Mock PageContent content3;
 
   private final SpreadLayoutCalculator calc = new SpreadLayoutCalculator();
-  private final StandardPagination pagination = new StandardPagination();
 
   @Test
   void rejectsMissingSourceFile(@TempDir Path tmp) {
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, pagination, listener);
+    var service = new SpreadService(factory, calc, listener);
     var opt =
         new SpreadOptions(
             tmp.resolve("missing.pdf"), tmp.resolve("out.pdf"), ReadingDirection.RTL, false);
@@ -69,7 +67,7 @@ final class SpreadServiceTest {
     when(source.pageContent(3)).thenReturn(content3);
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, pagination, listener);
+    var service = new SpreadService(factory, calc, listener);
     service.execute(
         new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false));
 
@@ -95,7 +93,7 @@ final class SpreadServiceTest {
     doThrow(SpreadException.of(ErrorKind.PDF_WRITE_FAILED)).when(output).addSpread(any(), any());
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, pagination, listener);
+    var service = new SpreadService(factory, calc, listener);
 
     assertThatThrownBy(
             () ->
@@ -120,7 +118,7 @@ final class SpreadServiceTest {
     when(source.pageContent(1)).thenReturn(content1);
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, pagination, listener);
+    var service = new SpreadService(factory, calc, listener);
     service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false));
 
     InOrder ord = inOrder(output);

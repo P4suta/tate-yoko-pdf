@@ -4,8 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import io.javalin.http.UploadedFile;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;

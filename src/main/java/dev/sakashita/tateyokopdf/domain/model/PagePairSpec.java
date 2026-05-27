@@ -1,7 +1,7 @@
 package dev.sakashita.tateyokopdf.domain.model;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.Validators;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.Validators;
 
 public sealed interface PagePairSpec {
 

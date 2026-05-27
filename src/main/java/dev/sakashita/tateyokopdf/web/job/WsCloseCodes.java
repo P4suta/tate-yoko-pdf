@@ -1,6 +1,6 @@
 package dev.sakashita.tateyokopdf.web.job;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 
 /**
  * Application-defined WebSocket close codes (RFC 6455 §7.4.2 reserves the 4000-4999 range for

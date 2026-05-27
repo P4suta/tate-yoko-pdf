@@ -1,4 +1,4 @@
-package dev.sakashita.tateyokopdf.port.exception;
+package dev.sakashita.tateyokopdf.domain.exception;
 
 public enum ErrorKind {
   PDF_CORRUPTED("PDFを読み込めませんでした。ファイルが破損している可能性があります。", true),

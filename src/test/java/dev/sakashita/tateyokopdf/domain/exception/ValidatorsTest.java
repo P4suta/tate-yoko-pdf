@@ -1,4 +1,4 @@
-package dev.sakashita.tateyokopdf.port.exception;
+package dev.sakashita.tateyokopdf.domain.exception;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;

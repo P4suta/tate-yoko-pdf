@@ -1,6 +1,6 @@
 package dev.sakashita.tateyokopdf.web.job;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 
 public sealed interface ProgressEvent {
 

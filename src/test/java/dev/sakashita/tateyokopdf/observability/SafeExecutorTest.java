@@ -2,8 +2,8 @@ package dev.sakashita.tateyokopdf.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;

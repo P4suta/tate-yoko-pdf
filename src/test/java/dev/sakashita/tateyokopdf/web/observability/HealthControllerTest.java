@@ -1,8 +1,9 @@
-package dev.sakashita.tateyokopdf.observability;
+package dev.sakashita.tateyokopdf.web.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.sakashita.tateyokopdf.web.job.JobRegistry;
+import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.ShutdownState;
 import io.javalin.Javalin;
 import io.javalin.testtools.JavalinTest;
 import java.nio.file.Path;
@@ -35,7 +36,7 @@ final class HealthControllerTest {
   private static HealthController upController(Path workDir) {
     var workers =
         new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
-    return new HealthController(new HealthCheck(new JobRegistry(), workers, workDir, 1L));
+    return new HealthController(new HealthCheck(() -> 0, workers, workDir, 1L));
   }
 
   @Test
@@ -78,7 +79,7 @@ final class HealthControllerTest {
     var workers =
         new ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS, new LinkedBlockingQueue<>());
     // disk threshold so high it cannot pass
-    var hc = new HealthCheck(new JobRegistry(), workers, tmp, Long.MAX_VALUE);
+    var hc = new HealthCheck(() -> 0, workers, tmp, Long.MAX_VALUE);
     var controller = new HealthController(hc);
     JavalinTest.test(
         app(controller),

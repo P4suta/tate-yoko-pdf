@@ -3,10 +3,10 @@ package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.testfixtures.PdfFixtures;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;

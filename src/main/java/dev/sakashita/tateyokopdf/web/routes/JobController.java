@@ -2,22 +2,19 @@ package dev.sakashita.tateyokopdf.web.routes;
 
 import dev.sakashita.tateyokopdf.application.SpreadOptions;
 import dev.sakashita.tateyokopdf.application.SpreadService;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
-import dev.sakashita.tateyokopdf.domain.strategy.CoverSinglePagination;
-import dev.sakashita.tateyokopdf.domain.strategy.PaginationStrategy;
-import dev.sakashita.tateyokopdf.domain.strategy.StandardPagination;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
-import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.observability.SafeExecutor;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import dev.sakashita.tateyokopdf.web.job.WebProgressListener;
 import dev.sakashita.tateyokopdf.web.job.WsCloseCodes;
 import dev.sakashita.tateyokopdf.web.job.WsFrames;
+import dev.sakashita.tateyokopdf.web.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.http.Context;
 import io.javalin.http.UploadedFile;
@@ -88,11 +85,8 @@ public final class JobController {
             .orElseThrow(() -> new IllegalStateException("listener missing after register"));
 
     SpreadOptions options = new SpreadOptions(inputPath, outputPath, direction, coverSingle);
-    PaginationStrategy strategy =
-        coverSingle ? new CoverSinglePagination() : new StandardPagination();
     SpreadService service =
-        new SpreadService(
-            new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), strategy, listener);
+        new SpreadService(new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), listener);
 
     // Fire-and-forget: the worker reports outcomes through `listener`; the
     // Future returned by submit() is intentionally discarded.

@@ -1,4 +1,4 @@
-package dev.sakashita.tateyokopdf.port.exception;
+package dev.sakashita.tateyokopdf.domain.exception;
 
 import java.nio.file.Files;
 import java.nio.file.Path;

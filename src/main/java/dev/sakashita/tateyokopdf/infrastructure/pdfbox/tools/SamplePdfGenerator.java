@@ -1,4 +1,4 @@
-package dev.sakashita.tateyokopdf.tools;
+package dev.sakashita.tateyokopdf.infrastructure.pdfbox.tools;
 
 import java.io.IOException;
 import java.nio.file.Files;
