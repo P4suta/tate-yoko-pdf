@@ -79,9 +79,28 @@ warmup:
 
 # ─── Quality ─────────────────────────────────────────────────────────────────
 
-# Full check (backend: test + spotless + errorprone + nullaway + spotbugs + jacoco, then frontend lint).
+# Apply every auto-fix the toolchain can derive: typos, spotless Java format,
+# biome + prettier for the frontend, plus regenerate the API type contract.
+# OpenRewrite recipes are intentionally *not* applied here — those are
+# semantic transforms, opt-in via `just rewrite`.
 [group('quality')]
-check: && lint
+format:
+    -@just dev-run typos --write-changes
+    @just gradle generateApiTypes spotlessApply
+    @just pnpm run format
+
+# Full quality gate. Auto-applies every fixable finding first via `format`, then
+# verifies whatever Spotless / Error Prone / NullAway / SpotBugs / JaCoCo / Biome /
+# svelte-check raise that can't be auto-fixed. CI runs `./gradlew check` directly,
+# so any auto-fixes you forget to commit still get caught upstream.
+[group('quality')]
+check: format && lint
+    @just gradle check
+
+# Strict verify-only (no auto-fix). Mirrors CI behaviour for the rare case you
+# want to see what a clean-tree CI run would surface.
+[group('quality')]
+check-strict: && lint
     @just gradle check
 
 # Backend tests only.
@@ -89,7 +108,7 @@ check: && lint
 test:
     @just gradle test
 
-# Frontend Biome lint + svelte-check.
+# Frontend Biome lint + svelte-check (verify only — auto-fixes live in `format`).
 [group('quality')]
 lint:
     @just pnpm run biome:check
@@ -99,13 +118,6 @@ lint:
 [group('quality')]
 generate-api-types:
     @just gradle generateApiTypes
-
-# Auto-format Java (Spotless) + .ts/.js/.json (Biome) + .svelte (Prettier).
-[group('quality')]
-format:
-    @just gradle spotlessApply
-    @just pnpm run biome:format
-    @just pnpm run format
 
 # Auto-fix typos across the repo.
 [group('quality')]
