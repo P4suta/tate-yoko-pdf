@@ -32,16 +32,16 @@ jobs:
       actions: write  # upload-artifact
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'liberica'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
       - run: corepack enable
       # setup-gradle handles caches + writes a per-job Build dashboard to the run summary.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Gradle check (test + spotless + errorprone + nullaway + spotbugs + jacoco + frontend build)
         run: ./gradlew check --no-daemon
       - name: Frontend Biome lint (.ts/.js/.json)
@@ -80,9 +80,9 @@ jobs:
         run: |
           echo "DEV_UID=$(id -u)" >> "$GITHUB_ENV"
           echo "DEV_GID=$(id -g)" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
       - name: Build dev image (BuildKit + GHA cache)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           target: dev
@@ -127,16 +127,16 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           java-version: '25'
           distribution: 'liberica'
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
-          node-version: '22'
+          node-version: '24'
       - name: Enable corepack
         run: corepack enable
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
       - name: Build app-image
         run: ./gradlew jpackageImage createSamplePdf --no-daemon
       - name: CLI smoke (macOS)
