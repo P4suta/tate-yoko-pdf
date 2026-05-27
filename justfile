@@ -144,6 +144,14 @@ rewrite-check:
 rewrite:
     @just gradle rewriteRun --no-configuration-cache
 
+# Run Pitest mutation testing on domain + application packages.
+# Reports kill rate per package; thresholds are 0 today (warning-only) so the
+# run never breaks the build. Same configuration-cache constraint as
+# ben-manes/openrewrite — Pitest reads Task.project at execution.
+[group('quality')]
+mutation:
+    @just gradle pitest --no-configuration-cache
+
 # ─── Build & distribution ────────────────────────────────────────────────────
 
 # Build the fat shadowJar at build/libs/tate-yoko-pdf-all.jar.
