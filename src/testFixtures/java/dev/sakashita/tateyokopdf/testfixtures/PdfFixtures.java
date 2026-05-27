@@ -3,7 +3,9 @@ package dev.sakashita.tateyokopdf.testfixtures;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.Consumer;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -71,6 +73,21 @@ public final class PdfFixtures {
       spp.setEncryptionKeyLength(128);
       spp.setPermissions(ap);
       doc.protect(spp);
+      doc.save(path.toFile());
+    }
+    return path;
+  }
+
+  /**
+   * 1 ページ A4 の PDF を生成し、呼出側が {@link PDDocumentInformation} に好きな field を載せられる builder。
+   * メタデータ継承のテストで必要な field だけ pinpoint して fixture 化できる。
+   */
+  public static Path withMetadata(Path dir, String name, Consumer<PDDocumentInformation> mutator)
+      throws IOException {
+    Path path = dir.resolve(name);
+    try (PDDocument doc = new PDDocument()) {
+      writeNumberedPage(doc, PDRectangle.A4, 1, 1);
+      mutator.accept(doc.getDocumentInformation());
       doc.save(path.toFile());
     }
     return path;

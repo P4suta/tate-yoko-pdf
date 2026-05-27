@@ -1,9 +1,12 @@
 package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
+import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 import dev.sakashita.tateyokopdf.port.PageContent;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
+import java.util.Optional;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.slf4j.Logger;
@@ -43,6 +46,20 @@ public class PdfBoxSourceDocument implements SourceDocument {
   @Override
   public PageContent pageContent(int index) {
     return new PdfBoxPageContent(document, index);
+  }
+
+  @Override
+  public DocumentMetadata metadata() {
+    PDDocumentInformation info = document.getDocumentInformation();
+    String language = document.getDocumentCatalog().getLanguage();
+    return new DocumentMetadata(
+        Optional.ofNullable(info.getTitle()),
+        Optional.ofNullable(info.getAuthor()),
+        Optional.ofNullable(info.getSubject()),
+        Optional.ofNullable(info.getKeywords()),
+        Optional.ofNullable(info.getCreator()),
+        Optional.ofNullable(info.getCreationDate()).map(c -> c.toInstant()),
+        Optional.ofNullable(language));
   }
 
   @Override

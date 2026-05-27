@@ -6,6 +6,9 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.testfixtures.PdfFixtures;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.GregorianCalendar;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -60,5 +63,47 @@ final class PdfBoxSourceDocumentTest {
     SourceDocument src = factory.openSource(PdfFixtures.multiPageA4(tmp, "p.pdf", 1));
     src.close();
     assertThatNoException().isThrownBy(src::close);
+  }
+
+  @Test
+  void metadataRoundTripsAllPreservedFields(@TempDir Path tmp) throws Exception {
+    Instant created = Instant.parse("2024-04-01T12:00:00Z");
+    Path src =
+        PdfFixtures.withMetadata(
+            tmp,
+            "in.pdf",
+            info -> {
+              // Japanese strings exercise PDFBox's auto-switch from PDFDocEncoding to UTF-16BE —
+              // an ASCII-only fixture would not catch a future regression in that path.
+              info.setTitle("見開き化テスト");
+              info.setAuthor("テスト著者");
+              info.setSubject("subject");
+              info.setKeywords("a, b, c");
+              info.setCreator("Microsoft Word");
+              info.setCreationDate(GregorianCalendar.from(created.atZone(ZoneOffset.UTC)));
+            });
+    try (SourceDocument doc = factory.openSource(src)) {
+      var meta = doc.metadata();
+      assertThat(meta.title()).contains("見開き化テスト");
+      assertThat(meta.author()).contains("テスト著者");
+      assertThat(meta.subject()).contains("subject");
+      assertThat(meta.keywords()).contains("a, b, c");
+      assertThat(meta.creator()).contains("Microsoft Word");
+      assertThat(meta.creationDate()).contains(created);
+    }
+  }
+
+  @Test
+  void metadataIsAllEmptyForFixtureWithoutInfoDict(@TempDir Path tmp) throws Exception {
+    try (SourceDocument doc = factory.openSource(PdfFixtures.multiPageA4(tmp, "plain.pdf", 1))) {
+      var meta = doc.metadata();
+      assertThat(meta.title()).isEmpty();
+      assertThat(meta.author()).isEmpty();
+      assertThat(meta.creator()).isEmpty();
+      assertThat(meta.language()).isEmpty();
+      // Note: PDFBox auto-fills CreationDate on save() even without explicit setter, so the
+      // fixture-created PDF carries a CreationDate. metadata().creationDate() therefore is
+      // present here — not part of this assertion.
+    }
   }
 }

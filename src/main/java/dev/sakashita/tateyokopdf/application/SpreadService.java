@@ -5,6 +5,7 @@ import dev.sakashita.tateyokopdf.domain.exception.Validators;
 import dev.sakashita.tateyokopdf.domain.model.*;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.port.*;
+import java.time.Instant;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public class SpreadService {
         progressListener.onSpreadComplete(i + 1, pairs.size());
       }
 
+      output.applyMetadata(source.metadata(), Instant.now(), Producer.NAME);
       output.save(options.outputPath());
     }
     // Post-processing runs *after* the SpreadDocument is closed so the file

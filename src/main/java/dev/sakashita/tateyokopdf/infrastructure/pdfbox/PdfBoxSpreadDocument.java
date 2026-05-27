@@ -2,14 +2,19 @@ package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.util.GregorianCalendar;
 import java.util.List;
 import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
@@ -58,6 +63,22 @@ public class PdfBoxSpreadDocument implements SpreadDocument {
         spec.widthPt(),
         spec.heightPt(),
         placements.size());
+  }
+
+  @Override
+  public void applyMetadata(DocumentMetadata source, Instant modDate, String producer) {
+    PDDocumentInformation info = document.getDocumentInformation();
+    source.title().ifPresent(info::setTitle);
+    source.author().ifPresent(info::setAuthor);
+    source.subject().ifPresent(info::setSubject);
+    source.keywords().ifPresent(info::setKeywords);
+    source.creator().ifPresent(info::setCreator);
+    source
+        .creationDate()
+        .ifPresent(t -> info.setCreationDate(GregorianCalendar.from(t.atZone(ZoneOffset.UTC))));
+    info.setModificationDate(GregorianCalendar.from(modDate.atZone(ZoneOffset.UTC)));
+    info.setProducer(producer);
+    source.language().ifPresent(document.getDocumentCatalog()::setLanguage);
   }
 
   @Override

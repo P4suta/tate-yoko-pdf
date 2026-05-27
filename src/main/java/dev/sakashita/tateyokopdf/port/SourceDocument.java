@@ -1,5 +1,6 @@
 package dev.sakashita.tateyokopdf.port;
 
+import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 
 public interface SourceDocument extends AutoCloseable {
@@ -9,6 +10,8 @@ public interface SourceDocument extends AutoCloseable {
   PageDimension pageDimension(int index);
 
   PageContent pageContent(int index);
+
+  DocumentMetadata metadata();
 
   @Override
   void close();
