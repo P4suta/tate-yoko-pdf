@@ -19,14 +19,6 @@ import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
 import io.javalin.http.Context;
 import io.javalin.http.UploadedFile;
 import io.javalin.websocket.WsConnectContext;
-import java.io.FilterInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.UUID;
@@ -36,6 +28,11 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * HTTP/WS routing entry points for jobs. Upload staging is delegated to {@link JobFactory} and
+ * download streaming to {@link DownloadHandler} so this class reads as a thin router rather than a
+ * mix of routing + filesystem + lifecycle concerns.
+ */
 public final class JobController {
 
   private static final Logger log = LoggerFactory.getLogger(JobController.class);
@@ -44,12 +41,20 @@ public final class JobController {
   private final JobRegistry registry;
   private final ExecutorService executor;
   private final UploadValidator uploadValidator;
+  private final JobFactory jobFactory;
+  private final DownloadHandler downloadHandler;
 
   public JobController(
-      JobRegistry registry, ExecutorService executor, UploadValidator uploadValidator) {
+      JobRegistry registry,
+      ExecutorService executor,
+      UploadValidator uploadValidator,
+      JobFactory jobFactory,
+      DownloadHandler downloadHandler) {
     this.registry = registry;
     this.executor = executor;
     this.uploadValidator = uploadValidator;
+    this.jobFactory = jobFactory;
+    this.downloadHandler = downloadHandler;
   }
 
   public void submit(Context ctx) {
@@ -63,28 +68,14 @@ public final class JobController {
     boolean coverSingle = ctx.formParam("coverSingle") != null;
     String traceId = traceIdOf(ctx);
 
-    Path workDir;
-    Path inputPath;
-    Path outputPath;
-    try {
-      workDir = Files.createTempDirectory("tate-yoko-job-");
-      inputPath = workDir.resolve("input.pdf");
-      try (var in = pdf.content()) {
-        Files.copy(in, inputPath, StandardCopyOption.REPLACE_EXISTING);
-      }
-      String outputName = originalName.replaceFirst("(?i)\\.pdf$", "") + "_spread.pdf";
-      outputPath = workDir.resolve(outputName);
-    } catch (IOException e) {
-      throw SpreadException.withDetail(ErrorKind.INTERNAL, "stage upload failed", e);
-    }
-
-    Job job = registry.register(workDir, inputPath, outputPath, originalName, traceId);
+    Job job = jobFactory.stage(pdf, originalName, traceId);
     WebProgressListener listener =
         registry
             .listener(job.id())
             .orElseThrow(() -> new IllegalStateException("listener missing after register"));
 
-    SpreadOptions options = new SpreadOptions(inputPath, outputPath, direction, coverSingle);
+    SpreadOptions options =
+        new SpreadOptions(job.inputPath(), job.outputPath(), direction, coverSingle);
     SpreadService service =
         new SpreadService(new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), listener);
 
@@ -156,43 +147,7 @@ public final class JobController {
   }
 
   public void download(Context ctx) {
-    Job job = lookup(ctx);
-    Path output = job.outputPath();
-    if (!Files.isRegularFile(output)) {
-      throw SpreadException.of(ErrorKind.JOB_OUTPUT_GONE);
-    }
-
-    long size;
-    InputStream raw;
-    try {
-      size = Files.size(output);
-      raw = Files.newInputStream(output);
-    } catch (IOException e) {
-      throw SpreadException.withDetail(ErrorKind.INTERNAL, "read output failed", e);
-    }
-
-    UUID id = job.id();
-    Path workDir = job.workDir();
-    InputStream stream =
-        new FilterInputStream(raw) {
-          @Override
-          public void close() throws IOException {
-            try {
-              super.close();
-            } finally {
-              registry.remove(id);
-              dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs.deleteQuietly(workDir);
-              log.debug("Cleaned up job {} after download", id);
-            }
-          }
-        };
-
-    ctx.contentType("application/pdf");
-    ctx.header(
-        "Content-Disposition",
-        "attachment; filename*=UTF-8''" + urlEncode(downloadName(job.originalName())));
-    ctx.header("Content-Length", Long.toString(size));
-    ctx.result(stream);
+    downloadHandler.serve(ctx, lookup(ctx));
   }
 
   private Job lookup(Context ctx) {
@@ -217,14 +172,5 @@ public final class JobController {
   private static String traceIdOf(Context ctx) {
     String t = ctx.attribute(RequestTracingFilter.ATTR_TRACE_ID);
     return t != null ? t : "-";
-  }
-
-  private static String downloadName(String originalName) {
-    String base = originalName.replaceFirst("(?i)\\.pdf$", "");
-    return base + "_spread.pdf";
-  }
-
-  private static String urlEncode(String s) {
-    return URLEncoder.encode(s, StandardCharsets.UTF_8).replace("+", "%20");
   }
 }
