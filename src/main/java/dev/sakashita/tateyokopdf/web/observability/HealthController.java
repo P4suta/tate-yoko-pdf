@@ -9,14 +9,16 @@ import java.util.StringJoiner;
 public final class HealthController {
 
   private final HealthCheck healthCheck;
+  private final ShutdownState shutdownState;
 
-  public HealthController(HealthCheck healthCheck) {
+  public HealthController(HealthCheck healthCheck, ShutdownState shutdownState) {
     this.healthCheck = healthCheck;
+    this.shutdownState = shutdownState;
   }
 
   /** Cheap "the process is alive" probe; no dependency calls. */
   public void liveness(Context ctx) {
-    if (ShutdownState.isShuttingDown()) {
+    if (shutdownState.isShuttingDown()) {
       ctx.status(503).contentType("application/json").result("{\"status\":\"SHUTTING_DOWN\"}");
       return;
     }
@@ -25,7 +27,7 @@ public final class HealthController {
 
   /** Runs every {@link HealthCheck} probe; 503 if any DOWN or if we are shutting down. */
   public void readiness(Context ctx) {
-    if (ShutdownState.isShuttingDown()) {
+    if (shutdownState.isShuttingDown()) {
       ctx.status(503)
           .contentType("application/json")
           .result("{\"status\":\"SHUTTING_DOWN\",\"checks\":{}}");

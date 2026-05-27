@@ -1,6 +1,7 @@
 package dev.sakashita.tateyokopdf.testfixtures;
 
 import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.ShutdownState;
 import dev.sakashita.tateyokopdf.web.WebLauncher;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
@@ -50,7 +51,8 @@ public final class WebTestHarness {
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
     WebExceptionHandler exHandler = new WebExceptionHandler();
     HealthController health =
-        new HealthController(new HealthCheck(registry::size, (ThreadPoolExecutor) workers));
+        new HealthController(
+            new HealthCheck(registry::size, (ThreadPoolExecutor) workers), new ShutdownState());
     return WebLauncher.buildJavalin(jobs, idle, exHandler, health, uploadBytes);
   }
 
