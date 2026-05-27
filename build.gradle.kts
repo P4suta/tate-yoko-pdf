@@ -58,6 +58,7 @@ dependencies {
     implementation("info.picocli:picocli:4.7.7")
     implementation("ch.qos.logback:logback-classic:1.5.32")
     implementation("io.javalin:javalin:7.2.2")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
 
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
@@ -77,6 +78,7 @@ dependencies {
     testImplementation("org.awaitility:awaitility:4.3.0")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
     testImplementation("net.jqwik:jqwik:1.10.0")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -160,7 +162,7 @@ configurations.all {
 
 tasks.test {
     useJUnitPlatform {
-        includeEngines("junit-jupiter", "jqwik")
+        includeEngines("junit-jupiter", "jqwik", "archunit")
     }
     finalizedBy(tasks.jacocoTestReport)
     maxParallelForks = (Runtime.getRuntime().availableProcessors() / 2).coerceAtLeast(1)
@@ -181,7 +183,7 @@ tasks.test {
 
 val jacocoClassExcludes =
     listOf(
-        "dev/sakashita/tateyokopdf/tools/**",
+        "dev/sakashita/tateyokopdf/infrastructure/pdfbox/tools/**",
         "dev/sakashita/tateyokopdf/Main.class",
         "dev/sakashita/tateyokopdf/web/WebLauncher.class",
         "dev/sakashita/tateyokopdf/web/WebLauncher\$*.class",
@@ -614,7 +616,7 @@ tasks.register<JavaExec>("createSamplePdf") {
     group = "verification"
     description = "Generate a sample multi-page PDF for manual / smoke testing"
     classpath = sourceSets.main.get().runtimeClasspath
-    mainClass = "dev.sakashita.tateyokopdf.tools.SamplePdfGenerator"
+    mainClass = "dev.sakashita.tateyokopdf.infrastructure.pdfbox.tools.SamplePdfGenerator"
     args = listOf("build/test-data/sample.pdf", "4")
 }
 

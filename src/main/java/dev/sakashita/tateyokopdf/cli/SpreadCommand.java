@@ -3,7 +3,6 @@ package dev.sakashita.tateyokopdf.cli;
 import dev.sakashita.tateyokopdf.application.*;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
-import dev.sakashita.tateyokopdf.domain.strategy.*;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
@@ -58,11 +57,9 @@ public class SpreadCommand implements Callable<Integer> {
 
     var factory = new PdfBoxDocumentFactory();
     var calculator = new SpreadLayoutCalculator();
-    PaginationStrategy strategy =
-        coverSingle ? new CoverSinglePagination() : new StandardPagination();
     var listener = new ConsoleProgressListener();
 
-    var service = new SpreadService(factory, calculator, strategy, listener);
+    var service = new SpreadService(factory, calculator, listener);
     service.execute(options);
     return CliExitCodes.OK;
   }

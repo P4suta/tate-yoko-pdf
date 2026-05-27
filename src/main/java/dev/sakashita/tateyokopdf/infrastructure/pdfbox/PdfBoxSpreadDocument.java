@@ -1,10 +1,10 @@
 package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;

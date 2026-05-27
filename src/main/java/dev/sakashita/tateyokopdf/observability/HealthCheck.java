@@ -1,6 +1,5 @@
 package dev.sakashita.tateyokopdf.observability;
 
-import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import java.io.IOException;
 import java.nio.file.FileStore;
 import java.nio.file.Files;
@@ -8,6 +7,7 @@ import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ThreadPoolExecutor;
+import java.util.function.IntSupplier;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,21 +30,21 @@ public final class HealthCheck {
 
   public record Report(Status status, Map<String, Check> checks) {}
 
-  private final JobRegistry registry;
+  private final IntSupplier jobCount;
   private final ThreadPoolExecutor workers;
   private final Path workDirRoot;
   private final long minFreeBytes;
 
   public HealthCheck(
-      JobRegistry registry, ThreadPoolExecutor workers, Path workDirRoot, long minFreeBytes) {
-    this.registry = registry;
+      IntSupplier jobCount, ThreadPoolExecutor workers, Path workDirRoot, long minFreeBytes) {
+    this.jobCount = jobCount;
     this.workers = workers;
     this.workDirRoot = workDirRoot;
     this.minFreeBytes = minFreeBytes;
   }
 
-  public HealthCheck(JobRegistry registry, ThreadPoolExecutor workers) {
-    this(registry, workers, defaultWorkDirRoot(), resolveMinFreeBytes());
+  public HealthCheck(IntSupplier jobCount, ThreadPoolExecutor workers) {
+    this(jobCount, workers, defaultWorkDirRoot(), resolveMinFreeBytes());
   }
 
   public Report run() {
@@ -115,7 +115,7 @@ public final class HealthCheck {
   }
 
   private Check checkJobRegistry() {
-    return new Check(Status.UP, "size=" + registry.size());
+    return new Check(Status.UP, "size=" + jobCount.getAsInt());
   }
 
   private static Path defaultWorkDirRoot() {

@@ -2,7 +2,7 @@ package dev.sakashita.tateyokopdf.web.job;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import org.junit.jupiter.api.Test;
 
 final class ProgressEventTest {

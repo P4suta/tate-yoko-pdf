@@ -1,8 +1,8 @@
 package dev.sakashita.tateyokopdf.domain.strategy;
 
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.Validators;
 import dev.sakashita.tateyokopdf.domain.model.PagePairSpec;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.Validators;
 import java.util.ArrayList;
 import java.util.List;
 

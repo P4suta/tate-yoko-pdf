@@ -1,7 +1,7 @@
 package dev.sakashita.tateyokopdf.web.upload;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import io.javalin.http.UploadedFile;
 import java.io.IOException;
 import java.io.InputStream;

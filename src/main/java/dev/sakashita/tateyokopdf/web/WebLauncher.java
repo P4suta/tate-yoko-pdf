@@ -1,15 +1,15 @@
 package dev.sakashita.tateyokopdf.web;
 
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.observability.HealthCheck;
-import dev.sakashita.tateyokopdf.observability.HealthController;
-import dev.sakashita.tateyokopdf.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.observability.ShutdownState;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
 import dev.sakashita.tateyokopdf.web.lifecycle.IdleShutdown;
 import dev.sakashita.tateyokopdf.web.lifecycle.SingleInstanceLock;
 import dev.sakashita.tateyokopdf.web.lifecycle.TempFileGc;
 import dev.sakashita.tateyokopdf.web.lifecycle.WorkDirs;
+import dev.sakashita.tateyokopdf.web.observability.HealthController;
+import dev.sakashita.tateyokopdf.web.observability.RequestTracingFilter;
 import dev.sakashita.tateyokopdf.web.routes.JobController;
 import dev.sakashita.tateyokopdf.web.routes.WebExceptionHandler;
 import dev.sakashita.tateyokopdf.web.upload.UploadValidator;
@@ -66,7 +66,7 @@ public final class WebLauncher {
     JobController jobs = new JobController(registry, workers, new UploadValidator());
     WebExceptionHandler exHandler = new WebExceptionHandler();
     HealthController health =
-        new HealthController(new HealthCheck(registry, (ThreadPoolExecutor) workers));
+        new HealthController(new HealthCheck(registry::size, (ThreadPoolExecutor) workers));
 
     TempFileGc gc = new TempFileGc(registry, JOB_TTL, GC_SWEEP_INTERVAL);
     gc.start();

@@ -1,5 +1,6 @@
-package dev.sakashita.tateyokopdf.observability;
+package dev.sakashita.tateyokopdf.web.observability;
 
+import dev.sakashita.tateyokopdf.observability.TraceContext;
 import io.javalin.http.Context;
 
 public final class RequestTracingFilter {

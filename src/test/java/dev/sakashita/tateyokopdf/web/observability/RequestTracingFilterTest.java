@@ -1,7 +1,8 @@
-package dev.sakashita.tateyokopdf.observability;
+package dev.sakashita.tateyokopdf.web.observability;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.sakashita.tateyokopdf.observability.TraceContext;
 import io.javalin.Javalin;
 import io.javalin.testtools.JavalinTest;
 import java.util.List;

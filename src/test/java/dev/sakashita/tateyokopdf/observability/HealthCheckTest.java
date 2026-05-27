@@ -26,7 +26,7 @@ final class HealthCheckTest {
 
   @Test
   void allChecksUpForFreshSetup(@TempDir Path tmp) {
-    var hc = new HealthCheck(new JobRegistry(), workers, tmp, 1L);
+    var hc = new HealthCheck(() -> 0, workers, tmp, 1L);
     var report = hc.run();
     assertThat(report.status()).isEqualTo(HealthCheck.Status.UP);
     assertThat(report.checks())
@@ -35,7 +35,7 @@ final class HealthCheckTest {
 
   @Test
   void diskFreeDownWhenThresholdImpossiblyHigh(@TempDir Path tmp) {
-    var hc = new HealthCheck(new JobRegistry(), workers, tmp, Long.MAX_VALUE);
+    var hc = new HealthCheck(() -> 0, workers, tmp, Long.MAX_VALUE);
     var report = hc.run();
     assertThat(report.status()).isEqualTo(HealthCheck.Status.DOWN);
     Check diskCheck = Objects.requireNonNull(report.checks().get("diskFreeBytes"));
@@ -45,7 +45,7 @@ final class HealthCheckTest {
   @Test
   void workDirDownWhenPathIsNotADirectory(@TempDir Path tmp) throws Exception {
     Path file = Files.createFile(tmp.resolve("notadir"));
-    var hc = new HealthCheck(new JobRegistry(), workers, file, 1L);
+    var hc = new HealthCheck(() -> 0, workers, file, 1L);
     var report = hc.run();
     Check workDir = Objects.requireNonNull(report.checks().get("workDirWritable"));
     assertThat(workDir.status()).isEqualTo(HealthCheck.Status.DOWN);
@@ -55,7 +55,7 @@ final class HealthCheckTest {
   @Test
   void executorDownAfterShutdown(@TempDir Path tmp) {
     workers.shutdown();
-    var hc = new HealthCheck(new JobRegistry(), workers, tmp, 1L);
+    var hc = new HealthCheck(() -> 0, workers, tmp, 1L);
     var report = hc.run();
     Check exec = Objects.requireNonNull(report.checks().get("executorHealthy"));
     assertThat(exec.status()).isEqualTo(HealthCheck.Status.DOWN);
@@ -66,7 +66,7 @@ final class HealthCheckTest {
   void jobRegistrySizeAppearsInDetail(@TempDir Path tmp) {
     var reg = new JobRegistry();
     reg.register(tmp, tmp.resolve("in"), tmp.resolve("out"), "a.pdf");
-    var hc = new HealthCheck(reg, workers, tmp, 1L);
+    var hc = new HealthCheck(reg::size, workers, tmp, 1L);
     var report = hc.run();
     Check jobReg = Objects.requireNonNull(report.checks().get("jobRegistry"));
     assertThat(jobReg.detail()).contains("size=1");

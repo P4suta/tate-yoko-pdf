@@ -21,7 +21,7 @@ public final class ShutdownState {
   }
 
   /** Test seam; clear the flag between tests. */
-  static void reset() {
+  public static void reset() {
     SHUTTING_DOWN.set(false);
   }
 }

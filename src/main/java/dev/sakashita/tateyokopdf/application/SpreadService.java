@@ -1,11 +1,10 @@
 package dev.sakashita.tateyokopdf.application;
 
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.Validators;
 import dev.sakashita.tateyokopdf.domain.model.*;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
-import dev.sakashita.tateyokopdf.domain.strategy.PaginationStrategy;
 import dev.sakashita.tateyokopdf.port.*;
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.Validators;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,17 +15,14 @@ public class SpreadService {
 
   private final DocumentFactory documentFactory;
   private final SpreadLayoutCalculator calculator;
-  private final PaginationStrategy paginationStrategy;
   private final ProgressListener progressListener;
 
   public SpreadService(
       DocumentFactory documentFactory,
       SpreadLayoutCalculator calculator,
-      PaginationStrategy paginationStrategy,
       ProgressListener progressListener) {
     this.documentFactory = documentFactory;
     this.calculator = calculator;
-    this.paginationStrategy = paginationStrategy;
     this.progressListener = progressListener;
   }
 
@@ -40,7 +36,8 @@ public class SpreadService {
       int totalPages = source.pageCount();
       log.info("Source PDF: {} pages", totalPages);
 
-      List<PagePairSpec> pairs = paginationStrategy.paginate(totalPages);
+      List<PagePairSpec> pairs =
+          PaginationStrategyFactory.from(options.coverSingle()).paginate(totalPages);
       progressListener.onStart(pairs.size());
 
       for (int i = 0; i < pairs.size(); i++) {

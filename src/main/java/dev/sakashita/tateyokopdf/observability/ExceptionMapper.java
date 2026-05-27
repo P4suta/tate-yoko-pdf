@@ -1,12 +1,11 @@
 package dev.sakashita.tateyokopdf.observability;
 
-import dev.sakashita.tateyokopdf.port.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.port.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import java.io.IOException;
 import java.util.EnumMap;
 import java.util.Map;
 import java.util.Objects;
-import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.event.Level;
 
@@ -43,9 +42,6 @@ public final class ExceptionMapper {
   private static SpreadException asSpreadException(Throwable t) {
     if (t instanceof SpreadException spread) {
       return spread;
-    }
-    if (t instanceof InvalidPasswordException) {
-      return SpreadException.of(ErrorKind.PDF_PASSWORD_PROTECTED, t);
     }
     if (t instanceof IllegalArgumentException) {
       String detail = t.getMessage();
