@@ -38,10 +38,8 @@ public final class DownloadHandler {
       throw SpreadException.of(ErrorKind.JOB_OUTPUT_GONE);
     }
 
-    long size;
     InputStream raw;
     try {
-      size = Files.size(output);
       raw = Files.newInputStream(output);
     } catch (IOException e) {
       throw SpreadException.withDetail(ErrorKind.INTERNAL, "read output failed", e);
@@ -63,11 +61,13 @@ public final class DownloadHandler {
           }
         };
 
+    // No explicit Content-Length — Javalin/Jetty will use chunked transfer-encoding, which is
+    // compression-agnostic. Setting the uncompressed size would mismatch the compressed body and
+    // make Jetty throw `IOException: written < content-length` on close.
     ctx.contentType("application/pdf");
     ctx.header(
         "Content-Disposition",
         "attachment; filename*=UTF-8''" + urlEncode(downloadName(job.originalName())));
-    ctx.header("Content-Length", Long.toString(size));
     ctx.result(stream);
   }
 
