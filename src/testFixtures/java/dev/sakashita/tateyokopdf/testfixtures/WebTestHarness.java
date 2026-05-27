@@ -1,6 +1,7 @@
 package dev.sakashita.tateyokopdf.testfixtures;
 
 import dev.sakashita.tateyokopdf.observability.HealthCheck;
+import dev.sakashita.tateyokopdf.observability.SafeExecutor;
 import dev.sakashita.tateyokopdf.observability.ShutdownState;
 import dev.sakashita.tateyokopdf.web.WebLauncher;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
@@ -46,7 +47,8 @@ public final class WebTestHarness {
             workers,
             new UploadValidator(),
             new JobFactory(registry),
-            new DownloadHandler(registry));
+            new DownloadHandler(registry),
+            new SafeExecutor());
     IdleShutdown idle =
         new IdleShutdown(Duration.ofHours(1), Duration.ofHours(1), () -> {}, Instant::now);
     WebExceptionHandler exHandler = new WebExceptionHandler();
