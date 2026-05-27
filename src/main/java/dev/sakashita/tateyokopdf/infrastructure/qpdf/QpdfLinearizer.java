@@ -1,7 +1,9 @@
 package dev.sakashita.tateyokopdf.infrastructure.qpdf;
 
+import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.io.File;
 import java.io.IOException;
@@ -18,8 +20,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Calls the {@code qpdf --linearize} binary as an out-of-process step so the produced PDF is served
- * with Fast Web View bytes-order. The binary is resolved in this order:
+ * Calls the {@code qpdf} binary as an out-of-process step that performs two modernisations in one
+ * pass:
+ *
+ * <ul>
+ *   <li>{@code --linearize} — reorders bytes so the PDF can be streamed (Fast Web View / HTTP Range
+ *       requests). qpdf packs the linearized output into object streams as part of this step, so we
+ *       do not need {@code --object-streams=generate} on top (verified empirically — adding it
+ *       produces a byte-identical file).
+ *   <li>{@code --min-version=X.Y} — rewrites the {@code %PDF-x.x} header byte to match {@link
+ *       PdfOutputPolicy#TARGET}. PDFBox's {@code setVersion} updates only the catalog {@code
+ *       /Version} entry for any value &ge; 1.4, so the header bump must happen here.
+ * </ul>
+ *
+ * <p>The binary is resolved in this order:
  *
  * <ol>
  *   <li>The in-bundle copy staged by {@code stageJpackageInput} from the upstream release zip.
@@ -30,7 +44,10 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code which qpdf} / {@code where qpdf} on {@code PATH} — for dev runs from the source tree
  *       on a machine that has qpdf installed.
  *   <li>Falls back to {@link PdfPostProcessor#noOp()} and logs a single warning so a missing binary
- *       in a bundling failure surfaces audibly without breaking the whole pipeline.
+ *       in a bundling failure surfaces audibly without breaking the whole pipeline. In that
+ *       fallback the output PDF still has its catalog {@code /Version} set to the target (most
+ *       conformant readers honour it) and is not linearized; the header byte stays at PDFBox's
+ *       internal default.
  * </ol>
  */
 public final class QpdfLinearizer implements PdfPostProcessor {
@@ -40,11 +57,18 @@ public final class QpdfLinearizer implements PdfPostProcessor {
   private static final Pattern PATH_SEPARATOR = Pattern.compile(Pattern.quote(File.pathSeparator));
 
   private final Path qpdfBinary;
+  private final PdfVersion targetVersion;
 
   // Package-private so tests can pin the binary to a controlled failure mode
   // (e.g. /bin/false) without going through the production resolution chain.
-  QpdfLinearizer(Path qpdfBinary) {
+  QpdfLinearizer(Path qpdfBinary, PdfVersion targetVersion) {
     this.qpdfBinary = qpdfBinary;
+    this.targetVersion = targetVersion;
+  }
+
+  // Convenience overload for tests that don't care about the target version.
+  QpdfLinearizer(Path qpdfBinary) {
+    this(qpdfBinary, PdfOutputPolicy.TARGET);
   }
 
   /** Build the most capable {@link PdfPostProcessor} we can for the current environment. */
@@ -52,16 +76,20 @@ public final class QpdfLinearizer implements PdfPostProcessor {
     Optional<Path> bundled = resolveBundledQpdf();
     if (bundled.isPresent()) {
       log.info("qpdf binary resolved from bundle: {}", bundled.get());
-      return new QpdfLinearizer(bundled.get());
+      return new QpdfLinearizer(bundled.get(), PdfOutputPolicy.TARGET);
     }
     Optional<Path> onPath = resolveOnPath();
     if (onPath.isPresent()) {
       log.info("qpdf binary resolved from PATH: {}", onPath.get());
-      return new QpdfLinearizer(onPath.get());
+      return new QpdfLinearizer(onPath.get(), PdfOutputPolicy.TARGET);
     }
     log.warn(
-        "qpdf binary not found; PDFs will not be linearised. Bundle a qpdf binary or add"
-            + " it to PATH for Fast Web View output.");
+        "qpdf binary not found. The following PDF modernisations are SKIPPED: "
+            + "(a) Fast Web View (linearisation), "
+            + "(b) header byte rewrite to %PDF-{}. "
+            + "Catalog /Version is still {} — most conformant readers honour it, "
+            + "but bundle a qpdf binary or add one to PATH for full conformance.",
+        PdfOutputPolicy.TARGET.label(), PdfOutputPolicy.TARGET.label());
     return PdfPostProcessor.noOp();
   }
 
@@ -72,7 +100,12 @@ public final class QpdfLinearizer implements PdfPostProcessor {
           ErrorKind.PDF_WRITE_FAILED, "qpdf input missing: " + path, null);
     }
     ProcessBuilder pb =
-        new ProcessBuilder(qpdfBinary.toString(), "--linearize", "--replace-input", path.toString())
+        new ProcessBuilder(
+                qpdfBinary.toString(),
+                "--linearize",
+                "--min-version=" + targetVersion.label(),
+                "--replace-input",
+                path.toString())
             .redirectErrorStream(true);
     try {
       Process process = pb.start();

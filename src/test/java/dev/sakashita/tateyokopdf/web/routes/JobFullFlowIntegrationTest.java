@@ -8,6 +8,10 @@ import dev.sakashita.tateyokopdf.testfixtures.PdfFixtures;
 import dev.sakashita.tateyokopdf.testfixtures.WebTestHarness;
 import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import io.javalin.testtools.JavalinTest;
+import java.net.URI;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -15,6 +19,7 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.apache.pdfbox.Loader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -47,9 +52,49 @@ final class JobFullFlowIntegrationTest {
     runFlow(tmp, 50, false, 25);
   }
 
+  @Test
+  void titleAndAuthorAreInheritedAcrossFullPipeline(@TempDir Path tmp) throws Exception {
+    Path inputFile =
+        PdfFixtures.withMetadata(
+            tmp,
+            "with-meta.pdf",
+            info -> {
+              info.setTitle("見開き化テスト");
+              info.setAuthor("テスト著者");
+            });
+    byte[] pdf = Files.readAllBytes(inputFile);
+    runFlowWithBytes(
+        pdf,
+        false,
+        1,
+        downloaded -> {
+          Path roundTripped;
+          try {
+            roundTripped = Files.write(tmp.resolve("downloaded.pdf"), downloaded);
+            try (var doc = Loader.loadPDF(roundTripped.toFile())) {
+              var info = doc.getDocumentInformation();
+              assertThat(info.getTitle()).isEqualTo("見開き化テスト");
+              assertThat(info.getAuthor()).isEqualTo("テスト著者");
+              assertThat(info.getProducer()).isEqualTo("tate-yoko-pdf");
+            }
+          } catch (Exception e) {
+            throw new AssertionError("metadata round-trip failed", e);
+          }
+        });
+  }
+
   private void runFlow(Path tmp, int pages, boolean coverSingle, int expectedSpreads)
       throws Exception {
     byte[] pdf = Files.readAllBytes(PdfFixtures.multiPageA4(tmp, "in.pdf", pages));
+    runFlowWithBytes(pdf, coverSingle, expectedSpreads, bytes -> {});
+  }
+
+  private void runFlowWithBytes(
+      byte[] pdf,
+      boolean coverSingle,
+      int expectedSpreads,
+      java.util.function.Consumer<byte[]> onDownloaded)
+      throws Exception {
     // JobController treats coverSingle as "any presence" — omit the field entirely for false.
     var body = new MultipartFormBody();
     if (coverSingle) {
@@ -90,18 +135,29 @@ final class JobFullFlowIntegrationTest {
             assertThat(terminal).isInstanceOf(ProgressEvent.Completed.class);
           }
 
-          var download = client.get("/api/jobs/" + jobId + "/download");
-          assertThat(download.code()).isEqualTo(200);
-          // OkHttp's testtools wrapper hides `body().bytes()`/`byteStream()`; `string()` decodes
-          // with ISO-8859-1 (latin-1) which is the only single-byte charset that round-trips
-          // every byte value 0..255 unchanged. Use that so a truncated PDF body is still
-          // detectable by tail-searching for `%%EOF`.
-          String dlBody = download.body().string();
+          // The testtools `client.get` wraps responses as `String`-decoded — fine for ASCII
+          // checks but it mangles binary bytes (compressed object streams, UTF-16BE-encoded
+          // metadata) once decoded as UTF-8. Use JDK's HttpClient directly so the body comes
+          // back as `byte[]`, lossless for PDFBox parsing downstream.
+          var jdkClient = java.net.http.HttpClient.newHttpClient();
+          var dlRequest =
+              HttpRequest.newBuilder()
+                  .GET()
+                  .uri(
+                      URI.create(
+                          "http://localhost:" + server.port() + "/api/jobs/" + jobId + "/download"))
+                  .build();
+          HttpResponse<byte[]> download =
+              jdkClient.send(dlRequest, HttpResponse.BodyHandlers.ofByteArray());
+          assertThat(download.statusCode()).isEqualTo(200);
+          byte[] dlBytes = download.body();
+          String dlBody = new String(dlBytes, StandardCharsets.ISO_8859_1);
           assertThat(dlBody).startsWith("%PDF-");
           int tailWindow = Math.min(64, dlBody.length());
           assertThat(dlBody.substring(dlBody.length() - tailWindow))
               .as("PDF body must end with %%EOF marker — truncation indicates a partial write")
               .contains("%%EOF");
+          onDownloaded.accept(dlBytes);
         });
   }
 }

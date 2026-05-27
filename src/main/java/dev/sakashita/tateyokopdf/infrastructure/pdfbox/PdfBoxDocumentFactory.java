@@ -1,7 +1,9 @@
 package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
+import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.port.DocumentFactory;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
@@ -15,6 +17,16 @@ import org.slf4j.LoggerFactory;
 public class PdfBoxDocumentFactory implements DocumentFactory {
 
   private static final Logger log = LoggerFactory.getLogger(PdfBoxDocumentFactory.class);
+
+  private final PdfVersion outputVersion;
+
+  public PdfBoxDocumentFactory(PdfVersion outputVersion) {
+    this.outputVersion = outputVersion;
+  }
+
+  public PdfBoxDocumentFactory() {
+    this(PdfOutputPolicy.TARGET);
+  }
 
   @Override
   public SourceDocument openSource(Path path) {
@@ -31,6 +43,6 @@ public class PdfBoxDocumentFactory implements DocumentFactory {
 
   @Override
   public SpreadDocument createOutput() {
-    return new PdfBoxSpreadDocument();
+    return new PdfBoxSpreadDocument(outputVersion);
   }
 }

@@ -8,6 +8,7 @@ import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import io.javalin.http.UploadedFile;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.Locale;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -36,7 +37,7 @@ final class UploadValidatorProperties {
       // Success: the returned filename must end in .pdf (case-insensitive) and be
       // non-blank — the validator's documented post-condition.
       assertThat(result).isNotBlank();
-      assertThat(result.toLowerCase()).endsWith(".pdf");
+      assertThat(result.toLowerCase(Locale.ROOT)).endsWith(".pdf");
     } catch (SpreadException ok) {
       // Rejection branch: any SpreadException is an acceptable outcome.
     }
