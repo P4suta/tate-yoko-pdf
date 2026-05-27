@@ -3,6 +3,7 @@ package dev.sakashita.tateyokopdf.infrastructure.qpdf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
@@ -10,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermissions;
+import org.apache.pdfbox.Loader;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIf;
 import org.junit.jupiter.api.condition.EnabledOnOs;
@@ -41,9 +43,21 @@ final class QpdfLinearizerTest {
     PdfPostProcessor processor = QpdfLinearizer.create();
     processor.process(pdf);
 
+    // (1) Linearization dict lives at the head of the file, before any object stream, so the
+    //     substring scan survives --object-streams=generate.
     String content = Files.readString(pdf, StandardCharsets.ISO_8859_1);
-    // qpdf --linearize rewrites the document with a /Linearized dictionary near the head.
     assertThat(content).contains("/Linearized");
+
+    // (2) Header byte must be lifted to the target version by --min-version. The input fixture
+    //     starts at %PDF-1.4; qpdf rewrites it.
+    byte[] head = Files.readAllBytes(pdf);
+    String header = new String(head, 0, Math.min(8, head.length), StandardCharsets.ISO_8859_1);
+    assertThat(header).startsWith("%PDF-" + PdfOutputPolicy.TARGET.label());
+
+    // (3) Catalog /Version is the second source of truth — readers honour the higher of the two.
+    try (var doc = Loader.loadPDF(pdf.toFile())) {
+      assertThat(doc.getVersion()).isEqualTo(PdfOutputPolicy.TARGET.headerValue());
+    }
   }
 
   @Test

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
+import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
@@ -45,6 +46,11 @@ final class PdfBoxSpreadDocumentTest {
       var mediaBox = doc.getPage(0).getMediaBox();
       assertThat(mediaBox.getWidth()).isEqualTo(1190f, within(0.5f));
       assertThat(mediaBox.getHeight()).isEqualTo(842f, within(0.5f));
+      // PDFBox 3.0.7 setVersion(>=1.4) only updates the catalog /Version entry; getVersion()
+      // returns the higher of (header byte, catalog /Version), so the catalog bump alone is
+      // enough to surface here. The %PDF-x.x header byte assertion lives in QpdfLinearizerTest
+      // because only qpdf can rewrite that byte.
+      assertThat(doc.getVersion()).isEqualTo(PdfOutputPolicy.TARGET.headerValue());
     }
   }
 

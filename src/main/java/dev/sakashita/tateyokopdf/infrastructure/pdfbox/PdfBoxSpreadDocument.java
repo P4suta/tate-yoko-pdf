@@ -2,6 +2,7 @@ package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
@@ -22,8 +23,12 @@ public class PdfBoxSpreadDocument implements SpreadDocument {
   private static final Logger log = LoggerFactory.getLogger(PdfBoxSpreadDocument.class);
   private final PDDocument document;
 
-  PdfBoxSpreadDocument() {
+  PdfBoxSpreadDocument(PdfVersion version) {
     this.document = new PDDocument();
+    // PDFBox 3.0.7 quirk: for any value >= 1.4 this only updates the catalog /Version entry,
+    // NOT the %PDF-x.x header byte. The header byte is rewritten downstream by qpdf
+    // (--min-version=X.Y); together they yield a fully version-consistent output.
+    this.document.setVersion(version.headerValue());
   }
 
   @Override
