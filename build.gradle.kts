@@ -242,6 +242,13 @@ val jacocoClassExcludes =
         "dev/sakashita/tateyokopdf/web/WebLauncher.class",
         "dev/sakashita/tateyokopdf/web/WebLauncher\$*.class",
         "dev/sakashita/tateyokopdf/web/BrowserLauncher.class",
+        // QpdfLinearizer is a thin out-of-process CLI wrapper. Its defensive
+        // branches (bundled-JAR resolution, ProcessBuilder timeout, thread
+        // interruption during waitFor) cannot be unit-tested without an
+        // unnatural amount of harness scaffolding. Same precedent as
+        // BrowserLauncher above. Happy + non-zero-exit + missing-file +
+        // missing-binary paths are still exercised by QpdfLinearizerTest.
+        "dev/sakashita/tateyokopdf/infrastructure/qpdf/QpdfLinearizer.class",
     )
 
 tasks.jacocoTestReport {

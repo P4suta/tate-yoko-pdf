@@ -1,0 +1,145 @@
+package dev.sakashita.tateyokopdf.infrastructure.qpdf;
+
+import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
+import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
+import java.io.File;
+import java.io.IOException;
+import java.net.URISyntaxException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Locale;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.regex.Pattern;
+import org.jspecify.annotations.Nullable;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/**
+ * Calls the {@code qpdf --linearize} binary as an out-of-process step so the produced PDF is served
+ * with Fast Web View bytes-order. The binary is resolved in this order:
+ *
+ * <ol>
+ *   <li>The in-bundle copy next to the shadow JAR (jpackage stages it under {@code app/} via {@code
+ *       --input}; {@link #resolveBundledQpdf()} finds the JAR location and looks for {@code qpdf}
+ *       (or {@code qpdf.exe}) as a sibling).
+ *   <li>{@code which qpdf} / {@code where qpdf} on {@code PATH} — for dev runs from the source tree
+ *       on a machine that has qpdf installed.
+ *   <li>Falls back to {@link PdfPostProcessor#noOp()} and logs a single warning so a missing binary
+ *       in a bundling failure surfaces audibly without breaking the whole pipeline.
+ * </ol>
+ */
+public final class QpdfLinearizer implements PdfPostProcessor {
+
+  private static final Logger log = LoggerFactory.getLogger(QpdfLinearizer.class);
+  private static final long TIMEOUT_SECONDS = 60L;
+  private static final Pattern PATH_SEPARATOR = Pattern.compile(Pattern.quote(File.pathSeparator));
+
+  private final Path qpdfBinary;
+
+  // Package-private so tests can pin the binary to a controlled failure mode
+  // (e.g. /bin/false) without going through the production resolution chain.
+  QpdfLinearizer(Path qpdfBinary) {
+    this.qpdfBinary = qpdfBinary;
+  }
+
+  /** Build the most capable {@link PdfPostProcessor} we can for the current environment. */
+  public static PdfPostProcessor create() {
+    Optional<Path> bundled = resolveBundledQpdf();
+    if (bundled.isPresent()) {
+      log.info("qpdf binary resolved from bundle: {}", bundled.get());
+      return new QpdfLinearizer(bundled.get());
+    }
+    Optional<Path> onPath = resolveOnPath();
+    if (onPath.isPresent()) {
+      log.info("qpdf binary resolved from PATH: {}", onPath.get());
+      return new QpdfLinearizer(onPath.get());
+    }
+    log.warn(
+        "qpdf binary not found; PDFs will not be linearised. Bundle a qpdf binary or add"
+            + " it to PATH for Fast Web View output.");
+    return PdfPostProcessor.noOp();
+  }
+
+  @Override
+  public void process(Path path) {
+    if (!Files.isRegularFile(path)) {
+      throw SpreadException.withDetail(
+          ErrorKind.PDF_WRITE_FAILED, "qpdf input missing: " + path, null);
+    }
+    ProcessBuilder pb =
+        new ProcessBuilder(qpdfBinary.toString(), "--linearize", "--replace-input", path.toString())
+            .redirectErrorStream(true);
+    try {
+      Process process = pb.start();
+      if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
+        process.destroyForcibly();
+        throw SpreadException.withDetail(
+            ErrorKind.PDF_WRITE_FAILED, "qpdf timed out after " + TIMEOUT_SECONDS + "s", null);
+      }
+      int code = process.exitValue();
+      // qpdf exits with 0 on success, 3 on warnings (which we accept), anything else is a failure.
+      if (code != 0 && code != 3) {
+        String tail = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        throw SpreadException.withDetail(
+            ErrorKind.PDF_WRITE_FAILED, "qpdf exit=" + code + " out=" + tail, null);
+      }
+      log.debug("Linearised {} via qpdf exit={}", path.getFileName(), code);
+    } catch (IOException e) {
+      throw SpreadException.withDetail(ErrorKind.PDF_WRITE_FAILED, "qpdf invocation failed", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw SpreadException.withDetail(ErrorKind.INTERNAL, "qpdf interrupted", e);
+    }
+  }
+
+  static Optional<Path> resolveBundledQpdf() {
+    String executableName = osIsWindows() ? "qpdf.exe" : "qpdf";
+    try {
+      var codeSource = QpdfLinearizer.class.getProtectionDomain().getCodeSource();
+      if (codeSource == null) {
+        return Optional.empty();
+      }
+      Path jarPath = Path.of(codeSource.getLocation().toURI());
+      Path jarDir = jarPath.getParent();
+      if (jarDir == null) {
+        return Optional.empty();
+      }
+      Path candidate = jarDir.resolve(executableName);
+      return Files.isExecutable(candidate) ? Optional.of(candidate) : Optional.empty();
+    } catch (URISyntaxException | RuntimeException e) {
+      log.debug("Could not derive bundled qpdf path from class location: {}", e.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  // Error Prone's StringSplitter check wants Guava's Splitter; pulling Guava in for one PATH
+  // walk is not worth it. `Pattern.compile(quote(File.pathSeparator)).split(...)` would still
+  // trip the check, and the surprising trailing-empty semantics that StringSplitter warns about
+  // don't matter here (we explicitly skip empties below).
+  @SuppressWarnings("StringSplitter")
+  static Optional<Path> resolveOnPath() {
+    String executableName = osIsWindows() ? "qpdf.exe" : "qpdf";
+    String pathEnv = System.getenv("PATH");
+    if (pathEnv == null) {
+      return Optional.empty();
+    }
+    for (String entry : PATH_SEPARATOR.split(pathEnv)) {
+      if (entry.isEmpty()) {
+        continue;
+      }
+      Path candidate = Path.of(entry, executableName);
+      if (Files.isExecutable(candidate)) {
+        return Optional.of(candidate);
+      }
+    }
+    return Optional.empty();
+  }
+
+  private static boolean osIsWindows() {
+    @Nullable String os = System.getProperty("os.name");
+    return os != null && os.toLowerCase(Locale.ROOT).contains("win");
+  }
+}

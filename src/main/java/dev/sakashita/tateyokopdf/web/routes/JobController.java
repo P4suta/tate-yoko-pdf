@@ -8,6 +8,7 @@ import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
 import dev.sakashita.tateyokopdf.observability.SafeExecutor;
+import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import dev.sakashita.tateyokopdf.web.job.Job;
 import dev.sakashita.tateyokopdf.web.job.JobJsonMapping;
 import dev.sakashita.tateyokopdf.web.job.JobRegistry;
@@ -44,6 +45,7 @@ public final class JobController {
   private final JobFactory jobFactory;
   private final DownloadHandler downloadHandler;
   private final SafeExecutor safeExecutor;
+  private final PdfPostProcessor pdfPostProcessor;
 
   public JobController(
       JobRegistry registry,
@@ -51,13 +53,15 @@ public final class JobController {
       UploadValidator uploadValidator,
       JobFactory jobFactory,
       DownloadHandler downloadHandler,
-      SafeExecutor safeExecutor) {
+      SafeExecutor safeExecutor,
+      PdfPostProcessor pdfPostProcessor) {
     this.registry = registry;
     this.executor = executor;
     this.uploadValidator = uploadValidator;
     this.jobFactory = jobFactory;
     this.downloadHandler = downloadHandler;
     this.safeExecutor = safeExecutor;
+    this.pdfPostProcessor = pdfPostProcessor;
   }
 
   public void submit(Context ctx) {
@@ -80,7 +84,8 @@ public final class JobController {
     SpreadOptions options =
         new SpreadOptions(job.inputPath(), job.outputPath(), direction, coverSingle);
     SpreadService service =
-        new SpreadService(new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), listener);
+        new SpreadService(
+            new PdfBoxDocumentFactory(), new SpreadLayoutCalculator(), pdfPostProcessor, listener);
 
     // Fire-and-forget: the worker reports outcomes through `listener`; the
     // Future returned by submit() is intentionally discarded.

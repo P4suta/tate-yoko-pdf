@@ -42,6 +42,8 @@ jobs:
       - run: corepack enable
       # setup-gradle handles caches + writes a per-job Build dashboard to the run summary.
       - uses: gradle/actions/setup-gradle@v6
+      - name: Install qpdf for the @EnabledIf linearization integration test
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qpdf
       - name: Gradle check (test + spotless + errorprone + nullaway + spotbugs + jacoco + frontend build)
         run: ./gradlew check --no-daemon
       - name: Frontend Biome lint (.ts/.js/.json)

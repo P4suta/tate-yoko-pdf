@@ -15,14 +15,17 @@ public class SpreadService {
 
   private final DocumentFactory documentFactory;
   private final SpreadLayoutCalculator calculator;
+  private final PdfPostProcessor pdfPostProcessor;
   private final ProgressListener progressListener;
 
   public SpreadService(
       DocumentFactory documentFactory,
       SpreadLayoutCalculator calculator,
+      PdfPostProcessor pdfPostProcessor,
       ProgressListener progressListener) {
     this.documentFactory = documentFactory;
     this.calculator = calculator;
+    this.pdfPostProcessor = pdfPostProcessor;
     this.progressListener = progressListener;
   }
 
@@ -46,8 +49,11 @@ public class SpreadService {
       }
 
       output.save(options.outputPath());
-      progressListener.onComplete(System.currentTimeMillis() - startTime);
     }
+    // Post-processing runs *after* the SpreadDocument is closed so the file
+    // handle is released before qpdf opens it in --replace-input mode.
+    pdfPostProcessor.process(options.outputPath());
+    progressListener.onComplete(System.currentTimeMillis() - startTime);
   }
 
   private void processSpread(

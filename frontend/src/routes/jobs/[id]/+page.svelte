@@ -13,7 +13,7 @@
 
 	const jobId = $derived(page.params.id);
 	const percent = $derived(total > 0 ? Math.min(100, Math.round((current * 100) / total)) : 0);
-	const downloadUrl = $derived(`/api/jobs/${jobId}/download`);
+	const previewUrl = $derived(`/api/jobs/${jobId}/download`);
 
 	$effect(() => {
 		if (!jobId) return;
@@ -63,7 +63,7 @@
 {:else if status === 'completed'}
 	<h1>変換が完了しました</h1>
 	<div class="actions">
-		<a class="download" href={downloadUrl}>PDF をダウンロード</a>
+		<a class="preview" href={previewUrl} target="_blank" rel="noopener"> PDF を新しいタブで開く </a>
 		<a class="secondary" href="/">別の PDF を変換</a>
 	</div>
 {:else}
@@ -126,7 +126,7 @@
 		margin-top: 1.5rem;
 		flex-wrap: wrap;
 	}
-	.download {
+	.preview {
 		font-size: 1rem;
 		padding: 0.6rem 1.2rem;
 		background: #2962ff;
@@ -135,7 +135,7 @@
 		border-radius: 6px;
 		text-decoration: none;
 	}
-	.download:hover {
+	.preview:hover {
 		background: #1d4ed8;
 	}
 	.secondary,

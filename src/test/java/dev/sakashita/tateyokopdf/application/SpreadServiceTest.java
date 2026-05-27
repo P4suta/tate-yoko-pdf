@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -17,6 +18,7 @@ import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.port.DocumentFactory;
 import dev.sakashita.tateyokopdf.port.PageContent;
+import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
 import dev.sakashita.tateyokopdf.testfixtures.CapturingProgressListener;
@@ -39,13 +41,14 @@ final class SpreadServiceTest {
   @Mock PageContent content1;
   @Mock PageContent content2;
   @Mock PageContent content3;
+  @Mock PdfPostProcessor postProcessor;
 
   private final SpreadLayoutCalculator calc = new SpreadLayoutCalculator();
 
   @Test
   void rejectsMissingSourceFile(@TempDir Path tmp) {
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, listener);
+    var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     var opt =
         new SpreadOptions(
             tmp.resolve("missing.pdf"), tmp.resolve("out.pdf"), ReadingDirection.RTL, false);
@@ -67,7 +70,7 @@ final class SpreadServiceTest {
     when(source.pageContent(3)).thenReturn(content3);
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, listener);
+    var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     service.execute(
         new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false));
 
@@ -93,7 +96,7 @@ final class SpreadServiceTest {
     doThrow(SpreadException.of(ErrorKind.PDF_WRITE_FAILED)).when(output).addSpread(any(), any());
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, listener);
+    var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
 
     assertThatThrownBy(
             () ->
@@ -118,11 +121,62 @@ final class SpreadServiceTest {
     when(source.pageContent(1)).thenReturn(content1);
 
     var listener = new CapturingProgressListener();
-    var service = new SpreadService(factory, calc, listener);
+    var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false));
 
     InOrder ord = inOrder(output);
     ord.verify(output).addSpread(any(), any());
     ord.verify(output).save(eq(outputFile));
+  }
+
+  @Test
+  void postProcessorRunsAfterSaveAndBeforeComplete(@TempDir Path tmp) throws Exception {
+    Path inputFile = Files.createFile(tmp.resolve("in.pdf"));
+    Path outputFile = tmp.resolve("out.pdf");
+    when(factory.openSource(inputFile)).thenReturn(source);
+    when(factory.createOutput()).thenReturn(output);
+    when(source.pageCount()).thenReturn(2);
+    when(source.pageDimension(anyInt())).thenReturn(new PageDimension(100f, 200f));
+    when(source.pageContent(0)).thenReturn(content0);
+    when(source.pageContent(1)).thenReturn(content1);
+
+    var listener = new CapturingProgressListener();
+    var service = new SpreadService(factory, calc, postProcessor, listener);
+    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false));
+
+    // Order matters: the SpreadDocument must close (file handle release) and
+    // save() must finish before qpdf opens the file; onComplete is the terminal
+    // signal so the listener should observe it only after post-processing succeeds.
+    InOrder ord = inOrder(output, postProcessor);
+    ord.verify(output).save(eq(outputFile));
+    ord.verify(output).close();
+    ord.verify(postProcessor).process(eq(outputFile));
+    assertThat(listener.events())
+        .last()
+        .isInstanceOf(CapturingProgressListener.Event.Complete.class);
+  }
+
+  @Test
+  void postProcessorIsSkippedWhenSpreadFails(@TempDir Path tmp) throws Exception {
+    Path inputFile = Files.createFile(tmp.resolve("in.pdf"));
+    when(factory.openSource(inputFile)).thenReturn(source);
+    when(factory.createOutput()).thenReturn(output);
+    when(source.pageCount()).thenReturn(2);
+    when(source.pageDimension(anyInt())).thenReturn(new PageDimension(100f, 200f));
+    when(source.pageContent(0)).thenReturn(content0);
+    when(source.pageContent(1)).thenReturn(content1);
+    doThrow(SpreadException.of(ErrorKind.PDF_WRITE_FAILED)).when(output).addSpread(any(), any());
+
+    var listener = new CapturingProgressListener();
+    var service = new SpreadService(factory, calc, postProcessor, listener);
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    new SpreadOptions(
+                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false)))
+        .isInstanceOf(SpreadException.class);
+
+    verify(postProcessor, never()).process(any());
   }
 }

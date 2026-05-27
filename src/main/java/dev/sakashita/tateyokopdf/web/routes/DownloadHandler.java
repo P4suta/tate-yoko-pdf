@@ -65,9 +65,11 @@ public final class DownloadHandler {
     // compression-agnostic. Setting the uncompressed size would mismatch the compressed body and
     // make Jetty throw `IOException: written < content-length` on close.
     ctx.contentType("application/pdf");
+    // `inline` lets the browser render the PDF in a new tab (the success-page button uses
+    // target="_blank"); the user saves via the browser's native UI if they want a local copy.
     ctx.header(
         "Content-Disposition",
-        "attachment; filename*=UTF-8''" + urlEncode(downloadName(job.originalName())));
+        "inline; filename*=UTF-8''" + urlEncode(downloadName(job.originalName())));
     ctx.result(stream);
   }
 
