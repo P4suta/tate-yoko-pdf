@@ -72,7 +72,7 @@ final class JobRegistryTest {
     var jobs = ConcurrentHashMap.<UUID>newKeySet();
     try {
       for (int t = 0; t < threads; t++) {
-        var unused =
+        var _ =
             pool.submit(
                 () -> {
                   try {

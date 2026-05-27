@@ -10,12 +10,6 @@ import org.junit.jupiter.api.Test;
 final class JobTest {
 
   @Test
-  void newJobIsPending() {
-    var job = sampleJob();
-    assertThat(job.status()).isInstanceOf(JobStatus.Pending.class);
-  }
-
-  @Test
   void allFieldsExposed() {
     UUID id = UUID.randomUUID();
     Instant t = Instant.parse("2026-01-01T00:00:00Z");
@@ -33,24 +27,33 @@ final class JobTest {
     assertThat(job.outputPath()).isEqualTo(Path.of("/tmp/out.pdf"));
     assertThat(job.originalName()).isEqualTo("doc.pdf");
     assertThat(job.createdAt()).isEqualTo(t);
+    assertThat(job.traceId()).isEqualTo("-");
   }
 
   @Test
-  void setStatusMutates() {
-    var job = sampleJob();
-    job.setStatus(new JobStatus.Running(1, 4));
-    assertThat(job.status()).isInstanceOf(JobStatus.Running.class);
-    job.setStatus(new JobStatus.Completed());
-    assertThat(job.status()).isInstanceOf(JobStatus.Completed.class);
+  void traceIdDefaultsToDash() {
+    var job =
+        new Job(
+            UUID.randomUUID(),
+            Path.of("/w"),
+            Path.of("/in"),
+            Path.of("/out"),
+            "x.pdf",
+            Instant.now());
+    assertThat(job.traceId()).isEqualTo("-");
   }
 
-  private static Job sampleJob() {
-    return new Job(
-        UUID.randomUUID(),
-        Path.of("/tmp/work"),
-        Path.of("/tmp/in.pdf"),
-        Path.of("/tmp/out.pdf"),
-        "x.pdf",
-        Instant.now());
+  @Test
+  void traceIdRetainedWhenProvided() {
+    var job =
+        new Job(
+            UUID.randomUUID(),
+            Path.of("/w"),
+            Path.of("/in"),
+            Path.of("/out"),
+            "x.pdf",
+            Instant.now(),
+            "trace-xyz");
+    assertThat(job.traceId()).isEqualTo("trace-xyz");
   }
 }

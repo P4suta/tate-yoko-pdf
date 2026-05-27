@@ -201,6 +201,7 @@ tasks.test {
 val jacocoClassExcludes =
     listOf(
         "dev/sakashita/tateyokopdf/infrastructure/pdfbox/tools/**",
+        "dev/sakashita/tateyokopdf/tools/**",
         "dev/sakashita/tateyokopdf/Main.class",
         "dev/sakashita/tateyokopdf/web/WebLauncher.class",
         "dev/sakashita/tateyokopdf/web/WebLauncher\$*.class",
@@ -636,6 +637,61 @@ tasks.register<JavaExec>("createSamplePdf") {
     mainClass = "dev.sakashita.tateyokopdf.infrastructure.pdfbox.tools.SamplePdfGenerator"
     args = listOf("build/test-data/sample.pdf", "4")
 }
+
+// ---- Frontend API type contract codegen --------------------------------------
+// `ProgressEvent` (sealed + @JsonTypeInfo) and `ReadingDirection` (enum) are the
+// single source of truth for the WS/HTTP contract. Reflection inside
+// `ApiTypesGenerator` emits the matching `frontend/src/lib/types.ts`, and the
+// verify task wired into `check` fails CI if a developer forgets to re-run the
+// generator after a Java-side rename.
+val apiTypesFile = file("frontend/src/lib/types.ts")
+val apiCodegenInputs =
+    listOf(
+        "src/main/java/dev/sakashita/tateyokopdf/web/job/ProgressEvent.java",
+        "src/main/java/dev/sakashita/tateyokopdf/domain/model/ReadingDirection.java",
+        "src/main/java/dev/sakashita/tateyokopdf/tools/ApiTypesGenerator.java",
+    )
+
+tasks.register<JavaExec>("generateApiTypes") {
+    group = "frontend"
+    description = "Regenerate frontend/src/lib/types.ts from ProgressEvent + ReadingDirection"
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "dev.sakashita.tateyokopdf.tools.ApiTypesGenerator"
+    args(apiTypesFile.absolutePath)
+    inputs.files(apiCodegenInputs)
+    outputs.file(apiTypesFile)
+}
+
+tasks.register<JavaExec>("regenerateApiTypesToTemp") {
+    classpath = sourceSets.main.get().runtimeClasspath
+    mainClass = "dev.sakashita.tateyokopdf.tools.ApiTypesGenerator"
+    val tempOut = layout.buildDirectory.file("generated/api/types.ts.expected")
+    args(tempOut.get().asFile.absolutePath)
+    inputs.files(apiCodegenInputs)
+    outputs.file(tempOut)
+}
+
+tasks.register("verifyApiTypesUpToDate") {
+    group = "verification"
+    description =
+        "Fail if frontend/src/lib/types.ts is stale w.r.t. ProgressEvent / ReadingDirection."
+    dependsOn("regenerateApiTypesToTemp")
+    val tempOut = layout.buildDirectory.file("generated/api/types.ts.expected")
+    val targetFile = apiTypesFile
+    inputs.files(apiCodegenInputs)
+    inputs.file(targetFile)
+    doLast {
+        val expected = tempOut.get().asFile.readText()
+        val actual = if (targetFile.exists()) targetFile.readText() else ""
+        if (expected != actual) {
+            throw GradleException(
+                "frontend/src/lib/types.ts is stale. Run `just generate-api-types` and commit.",
+            )
+        }
+    }
+}
+
+tasks.check { dependsOn("verifyApiTypesUpToDate") }
 
 // ---- SvelteKit frontend (Svelte 5 + TS + Vite + adapter-static) -------------
 // Node.js (with corepack-managed pnpm) is provided by the dev container or by

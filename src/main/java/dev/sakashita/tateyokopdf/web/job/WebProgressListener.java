@@ -8,6 +8,11 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 
+/**
+ * Owns the ProgressEvent stream for a single job. History + the {@code terminal} flag are the only
+ * source of truth for "where is this job"; readers (WS pump, idle shutdown's busy check) consult
+ * this listener instead of any duplicate status field on {@link Job}.
+ */
 public final class WebProgressListener implements ProgressListener {
 
   private final Job job;
@@ -33,6 +38,16 @@ public final class WebProgressListener implements ProgressListener {
     subscribers.remove(q);
   }
 
+  /** Snapshot of every event published so far. */
+  public List<ProgressEvent> history() {
+    return List.copyOf(history);
+  }
+
+  /** True once a {@code Completed} or {@code Failed} event has been published. */
+  public boolean terminal() {
+    return terminal;
+  }
+
   private void publish(ProgressEvent event) {
     history.add(event);
     if (event instanceof ProgressEvent.Completed || event instanceof ProgressEvent.Failed) {
@@ -48,30 +63,25 @@ public final class WebProgressListener implements ProgressListener {
 
   @Override
   public void onStart(int totalSpreads) {
-    job.setStatus(new JobStatus.Running(0, totalSpreads));
     publish(new ProgressEvent.Started(totalSpreads, job.traceId()));
   }
 
   @Override
   public void onSpreadComplete(int currentSpread, int totalSpreads) {
-    job.setStatus(new JobStatus.Running(currentSpread, totalSpreads));
     publish(new ProgressEvent.Progress(currentSpread, totalSpreads, job.traceId()));
   }
 
   @Override
   public void onComplete(long elapsedMillis) {
-    job.setStatus(new JobStatus.Completed());
     publish(new ProgressEvent.Completed(job.traceId()));
   }
 
   public void fail(SpreadException e) {
-    job.setStatus(new JobStatus.Failed(e.userMessage()));
     publish(new ProgressEvent.Failed(e.kind(), e.userMessage(), job.traceId()));
   }
 
   /** Convenience for callers that only have a plain message string (defaults to INTERNAL). */
   public void fail(String message) {
-    job.setStatus(new JobStatus.Failed(message));
     publish(new ProgressEvent.Failed(ErrorKind.INTERNAL, message, job.traceId()));
   }
 }

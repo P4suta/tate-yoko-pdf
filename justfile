@@ -95,6 +95,11 @@ lint:
     @just pnpm run biome:check
     @just pnpm run check
 
+# Regenerate frontend/src/lib/types.ts from the sealed ProgressEvent.
+[group('quality')]
+generate-api-types:
+    @just gradle generateApiTypes
+
 # Auto-format Java (Spotless) + .ts/.js/.json (Biome) + .svelte (Prettier).
 [group('quality')]
 format:

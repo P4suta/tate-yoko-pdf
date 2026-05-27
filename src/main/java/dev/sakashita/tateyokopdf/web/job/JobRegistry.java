@@ -66,10 +66,10 @@ public final class JobRegistry {
     return jobs.size();
   }
 
+  /** A job is "running" while its listener has not yet emitted a Completed or Failed event. */
   public boolean hasRunningJobs() {
-    for (Job job : jobs.values()) {
-      JobStatus status = job.status();
-      if (status instanceof JobStatus.Pending || status instanceof JobStatus.Running) {
+    for (WebProgressListener listener : listeners.values()) {
+      if (!listener.terminal()) {
         return true;
       }
     }
