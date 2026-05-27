@@ -24,8 +24,13 @@ public final class WebProgressListener implements ProgressListener {
     this.job = job;
   }
 
-  /** Subscribe a new WS client. The queue is back-filled with history. */
-  public BlockingQueue<ProgressEvent> subscribe() {
+  /**
+   * Subscribe a new WS client. The queue is back-filled with history. {@code synchronized} against
+   * {@link #publish} so a late subscriber cannot miss an in-flight terminal event in the window
+   * between reading {@code history} and checking {@code terminal} — a race that {@link
+   * CopyOnWriteArrayList} + {@code volatile} cannot defend on its own.
+   */
+  public synchronized BlockingQueue<ProgressEvent> subscribe() {
     BlockingQueue<ProgressEvent> q = new LinkedBlockingQueue<>();
     q.addAll(history);
     if (!terminal) {
@@ -48,7 +53,7 @@ public final class WebProgressListener implements ProgressListener {
     return terminal;
   }
 
-  private void publish(ProgressEvent event) {
+  private synchronized void publish(ProgressEvent event) {
     history.add(event);
     if (event instanceof ProgressEvent.Completed || event instanceof ProgressEvent.Failed) {
       terminal = true;
