@@ -102,6 +102,7 @@ dependencies {
     testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testFixturesImplementation("org.jspecify:jspecify:1.0.0")
     testFixturesImplementation("io.javalin:javalin:7.2.2")
+    testFixturesImplementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
 }
 
 spotless {
