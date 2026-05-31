@@ -35,7 +35,7 @@ plugins {
     id("com.github.ben-manes.versions") version "0.54.0"
     id("com.github.node-gradle.node") version "7.1.0"
     id("org.openrewrite.rewrite") version "7.33.0"
-    id("info.solidsoft.pitest") version "1.19.0-rc.1"
+    id("info.solidsoft.pitest") version "1.19.0"
 }
 
 rewrite {
