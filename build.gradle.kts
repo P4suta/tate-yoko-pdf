@@ -12,7 +12,7 @@ import javax.inject.Inject
 buildscript {
     val patches =
         mapOf(
-            "com.fasterxml.jackson.core:jackson-core" to "2.19.0",
+            "com.fasterxml.jackson.core:jackson-core" to "2.21.4",
             "org.codehaus.plexus:plexus-utils" to "4.0.2",
             "org.apache.logging.log4j:log4j-core" to "2.26.0",
         )
@@ -28,13 +28,13 @@ plugins {
     application
     jacoco
     `java-test-fixtures`
-    id("com.gradleup.shadow") version "9.4.1"
-    id("com.diffplug.spotless") version "8.5.1"
+    id("com.gradleup.shadow") version "9.4.2"
+    id("com.diffplug.spotless") version "8.6.0"
     id("net.ltgt.errorprone") version "5.1.0"
-    id("com.github.spotbugs") version "6.0.27"
+    id("com.github.spotbugs") version "6.5.5"
     id("com.github.ben-manes.versions") version "0.54.0"
     id("com.github.node-gradle.node") version "7.1.0"
-    id("org.openrewrite.rewrite") version "7.13.0"
+    id("org.openrewrite.rewrite") version "7.33.0"
     id("info.solidsoft.pitest") version "1.19.0-rc.1"
 }
 
@@ -51,7 +51,7 @@ rewrite {
 }
 
 dependencies {
-    rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.16.0")
+    rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.35.0")
 }
 
 // ---- Pitest (mutation testing) ----------------------------------------------
@@ -141,9 +141,9 @@ dependencies {
 
     implementation("org.apache.pdfbox:pdfbox:3.0.7")
     implementation("info.picocli:picocli:4.7.7")
-    implementation("ch.qos.logback:logback-classic:1.5.32")
+    implementation("ch.qos.logback:logback-classic:1.5.33")
     implementation("io.javalin:javalin:7.2.2")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.4")
 
     implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
@@ -162,15 +162,15 @@ dependencies {
     testImplementation("nl.jqno.equalsverifier:equalsverifier:4.5")
     testImplementation("org.awaitility:awaitility:4.3.0")
     testImplementation("uk.org.webcompere:system-stubs-jupiter:2.1.8")
-    testImplementation("net.jqwik:jqwik:1.10.0")
-    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.1")
+    testImplementation("net.jqwik:jqwik:1.10.1")
+    testImplementation("com.tngtech.archunit:archunit-junit5:1.4.2")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
     testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testFixturesImplementation("org.jspecify:jspecify:1.0.0")
     testFixturesImplementation("io.javalin:javalin:7.2.2")
-    testFixturesImplementation("com.fasterxml.jackson.core:jackson-databind:2.19.0")
+    testFixturesImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.4")
 }
 
 spotless {
@@ -235,7 +235,7 @@ tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
 // `buildscript {}` block.)
 val securityPatches =
     mapOf(
-        "com.fasterxml.jackson.core:jackson-core" to "2.19.0",
+        "com.fasterxml.jackson.core:jackson-core" to "2.21.4",
         "org.codehaus.plexus:plexus-utils" to "4.0.2",
         "org.apache.logging.log4j:log4j-core" to "2.26.0",
     )
