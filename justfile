@@ -124,35 +124,34 @@ mutation:
 
 # ─── Build & distribution ────────────────────────────────────────────────────
 
-# Build the fat shadowJar at build/libs/tate-yoko-pdf-all.jar.
+# Build the fat shadowJar at app/build/libs/tate-yoko-pdf-all.jar.
 [group('build')]
 shadow:
-    @just gradle shadowJar
+    @just gradle :app:shadowJar
 
-# Build the jpackage app-image (bundled JRE + shadow jar) under build/dist-jpackage/.
+# Build the jpackage app-image (bundled JRE + shadow jar) under app/build/dist-jpackage/.
 [group('build')]
 package:
-    @just gradle jpackageImage
+    @just gradle :app:jpackageImage
 
-# Build the app-image and convert a sample PDF through it (asserting `%PDF` magic on the output).
+# Build the app-image and convert a sample PDF through it, asserting `%PDF` magic on the output.
+# The cross-platform check lives in SmokeCheck.java (smokeCheck depends on the build tasks).
 [group('build')]
-smoke: sample-pdf package
-    @just dev-run ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
-    @just dev-run grep -q %PDF build/test-data/jpackage-out.pdf
-    @echo "✓ jpackage CLI smoke passed"
+smoke:
+    @just gradle smokeCheck
 
-# Generate a 4-page sample PDF at build/test-data/sample.pdf.
+# Generate a 4-page sample PDF at app/build/test-data/sample.pdf.
 [group('build')]
 sample-pdf:
-    @just gradle createSamplePdf
+    @just gradle :app:createSamplePdf
 
-# Unlike most recipes this runs the launcher NATIVELY on the host (not via
-# `dev-run`): the app-image bundles its own JRE, and going through the dev
-# container would add overhead that skews the wall-clock and RSS numbers.
-# Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md.
+# Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md. The
+# RuntimeBenchmark harness spawns the bundled app-image launcher and measures it in
+# pure Java (System.nanoTime for wall, /proc/<pid>/status VmHWM for peak RSS).
+# Override the warm-run count with `-Pruns=N` and add files with `-Pinputs="a.pdf b.pdf"`.
 [group('build')]
-bench-runtime: sample-pdf package
-    scripts/bench-runtime.sh
+bench-runtime:
+    @just gradle benchRuntime
 
 # Remove Gradle build outputs.
 [group('build')]
