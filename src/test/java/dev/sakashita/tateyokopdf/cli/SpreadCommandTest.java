@@ -77,6 +77,47 @@ final class SpreadCommandTest {
   }
 
   @Test
+  void firstPageLeftAccepted(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 5);
+    Path output = tmp.resolve("out.pdf");
+    Captured c = run(input.toString(), "-o", output.toString(), "--first-page", "left");
+    assertThat(c.code()).isZero();
+    assertThat(Files.exists(output)).isTrue();
+  }
+
+  @Test
+  void firstPageRightAccepted(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 5);
+    Path output = tmp.resolve("out.pdf");
+    Captured c = run(input.toString(), "-o", output.toString(), "--first-page", "right");
+    assertThat(c.code()).isZero();
+    assertThat(Files.exists(output)).isTrue();
+  }
+
+  @Test
+  void firstPageCoverAccepted(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 5);
+    Path output = tmp.resolve("out.pdf");
+    Captured c = run(input.toString(), "-o", output.toString(), "--first-page", "cover");
+    assertThat(c.code()).isZero();
+    assertThat(Files.exists(output)).isTrue();
+  }
+
+  @Test
+  void unknownFirstPageRejectedWithUsageCode(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
+    Captured c = run(input.toString(), "--first-page", "sideways");
+    assertThat(c.code()).isEqualTo(CliExitCodes.USAGE);
+  }
+
+  @Test
+  void firstPageAndCoverSingleTogetherRejected(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
+    Captured c = run(input.toString(), "--first-page", "left", "--cover-single");
+    assertThat(c.code()).isEqualTo(CliExitCodes.USAGE);
+  }
+
+  @Test
   void pdfAFlagAccepted(@TempDir Path tmp) throws Exception {
     Path input = PdfFixtures.blankPages(tmp, "in.pdf", 2);
     Path output = tmp.resolve("out.pdf");

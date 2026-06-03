@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.within;
 
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
+import dev.sakashita.tateyokopdf.domain.model.SpreadHalf;
 import dev.sakashita.tateyokopdf.domain.model.SpreadLayout;
 import org.junit.jupiter.api.Test;
 
@@ -56,7 +57,7 @@ final class SpreadLayoutCalculatorTest {
   @Test
   void singlePagePlacedOnLeadingHalfRtl() {
     var dim = new PageDimension(100f, 200f);
-    SpreadLayout layout = calc.calculate(ReadingDirection.RTL, dim, null);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.RTL, dim, SpreadHalf.LEADING);
     assertThat(layout.spec().widthPt()).isEqualTo(200f);
     assertThat(layout.firstPosition().offsetXPt()).isEqualTo(100f, within(EPS));
     assertThat(layout.secondPosition()).isEmpty();
@@ -65,7 +66,7 @@ final class SpreadLayoutCalculatorTest {
   @Test
   void singlePagePlacedOnLeadingHalfLtr() {
     var dim = new PageDimension(100f, 200f);
-    SpreadLayout layout = calc.calculate(ReadingDirection.LTR, dim, null);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.LTR, dim, SpreadHalf.LEADING);
     assertThat(layout.firstPosition().offsetXPt()).isZero();
     assertThat(layout.secondPosition()).isEmpty();
   }
@@ -123,14 +124,14 @@ final class SpreadLayoutCalculatorTest {
   @Test
   void rtlSinglePlacedOnRightHalf() {
     var dim = new PageDimension(100f, 200f);
-    SpreadLayout layout = calc.calculate(ReadingDirection.RTL, dim, null);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.RTL, dim, SpreadHalf.LEADING);
     assertThat(layout.firstPosition().offsetXPt()).isGreaterThanOrEqualTo(100f);
   }
 
   @Test
   void ltrSinglePlacedOnLeftHalf() {
     var dim = new PageDimension(100f, 200f);
-    SpreadLayout layout = calc.calculate(ReadingDirection.LTR, dim, null);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.LTR, dim, SpreadHalf.LEADING);
     assertThat(layout.firstPosition().offsetXPt()).isLessThan(100f);
   }
 
@@ -153,5 +154,31 @@ final class SpreadLayoutCalculatorTest {
         .isEqualTo(ltr.secondPosition().get().offsetXPt(), within(EPS));
     assertThat(rtl.secondPosition().get().offsetXPt())
         .isEqualTo(ltr.firstPosition().offsetXPt(), within(EPS));
+  }
+
+  @Test
+  void rtlTrailingSingleOnLeftHalf() {
+    var dim = new PageDimension(100f, 200f);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.RTL, dim, SpreadHalf.TRAILING);
+    assertThat(layout.spec().widthPt()).isEqualTo(200f);
+    assertThat(layout.firstPosition().offsetXPt()).isZero();
+    assertThat(layout.secondPosition()).isEmpty();
+  }
+
+  @Test
+  void ltrTrailingSingleOnRightHalf() {
+    var dim = new PageDimension(100f, 200f);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.LTR, dim, SpreadHalf.TRAILING);
+    assertThat(layout.firstPosition().offsetXPt()).isEqualTo(100f, within(EPS));
+    assertThat(layout.secondPosition()).isEmpty();
+  }
+
+  @Test
+  void leadingAndTrailingSinglesSitOnOppositeHalves() {
+    var dim = new PageDimension(100f, 200f);
+    var leading = calc.calculateSingle(ReadingDirection.RTL, dim, SpreadHalf.LEADING);
+    var trailing = calc.calculateSingle(ReadingDirection.RTL, dim, SpreadHalf.TRAILING);
+    assertThat(leading.firstPosition().offsetXPt())
+        .isGreaterThan(trailing.firstPosition().offsetXPt());
   }
 }

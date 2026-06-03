@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.within;
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
+import dev.sakashita.tateyokopdf.domain.model.SpreadHalf;
 import dev.sakashita.tateyokopdf.domain.model.SpreadLayout;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import net.jqwik.api.Arbitraries;
@@ -47,8 +48,20 @@ final class SpreadLayoutCalculatorProperties {
 
   @Property
   void specWidthIsTwiceWidthForSingle(@ForAll @From("dims") PageDimension a) {
-    SpreadLayout layout = calc.calculate(ReadingDirection.RTL, a, null);
+    SpreadLayout layout = calc.calculateSingle(ReadingDirection.RTL, a, SpreadHalf.LEADING);
     assertThat(layout.spec().widthPt()).isEqualTo(a.widthPt() * 2f, within(EPS));
+    assertThat(layout.secondPosition()).isEmpty();
+  }
+
+  @Property
+  void singleStaysWithinSpreadOnEitherHalf(
+      @ForAll ReadingDirection dir,
+      @ForAll SpreadHalf half,
+      @ForAll @From("dims") PageDimension a) {
+    SpreadLayout layout = calc.calculateSingle(dir, a, half);
+    LayoutPosition pos = layout.firstPosition();
+    assertThat(pos.offsetXPt()).isGreaterThanOrEqualTo(-EPS);
+    assertThat(pos.offsetXPt() + a.widthPt()).isLessThanOrEqualTo(layout.spec().widthPt() + EPS);
     assertThat(layout.secondPosition()).isEmpty();
   }
 

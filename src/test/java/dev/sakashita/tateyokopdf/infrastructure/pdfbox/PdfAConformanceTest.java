@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import dev.sakashita.tateyokopdf.application.SpreadOptions;
 import dev.sakashita.tateyokopdf.application.SpreadService;
+import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.qpdf.QpdfLinearizer;
@@ -61,7 +62,8 @@ final class PdfAConformanceTest {
             new SpreadLayoutCalculator(),
             postProcessor,
             new CapturingProgressListener());
-    service.execute(new SpreadOptions(input, output, ReadingDirection.RTL, false, true));
+    service.execute(
+        new SpreadOptions(input, output, ReadingDirection.RTL, FirstPageMode.STANDARD, true));
     return output;
   }
 

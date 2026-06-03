@@ -29,7 +29,8 @@
 ```bash
 ./tate-yoko-pdf novel.pdf                       # ゼロ設定でRTL見開き → novel_spread.pdf
 ./tate-yoko-pdf novel.pdf -o out/spread.pdf     # 出力先指定
-./tate-yoko-pdf novel.pdf --cover-single        # 表紙を単独見開きに
+./tate-yoko-pdf novel.pdf --first-page left     # 1ページ目を左始まり（先頭ブランク）
+./tate-yoko-pdf novel.pdf --first-page cover    # 表紙を単独見開きに（旧 --cover-single）
 ./tate-yoko-pdf textbook.pdf -d LTR             # 横書きPDF用
 ./tate-yoko-pdf a.pdf b.pdf c.pdf -o out/       # 複数ファイルをまとめて変換（-o はディレクトリ）
 ./tate-yoko-pdf scans/ -o out/                  # ディレクトリ直下の *.pdf を一括変換
@@ -43,7 +44,9 @@ cat in.pdf | ./tate-yoko-pdf - -o - > out.pdf   # stdin → stdout（Unix パイ
 | `INPUT...` | 入力PDF。**ファイル（複数可）/ ディレクトリ / `-`（stdin）**（必須） | — |
 | `-o`, `--output` | 出力先。単一→ファイル、複数/ディレクトリ入力→出力ディレクトリ、`-`→stdout | `<input>_spread.pdf` |
 | `-d`, `--direction` | 読み順: `RTL` または `LTR` | `RTL` |
-| `--cover-single` | 表紙を単独見開きにする | `false` |
+| `--first-page` | 1ページ目の開始側: `right` / `left` / `cover`（`left` は先頭ブランクで1ページ目を反対側に、`cover` は表紙を単独に）。`--cover-single` は `cover` の非推奨エイリアス | 読み方向の自然側 |
+| `--pdf-a` | PDF/A-2b を出力（保存用・ベストエフォルト） | `false` |
+| `--low-memory` | ページストリームを一時ファイルへ退避しヒープを抑制（巨大スキャン向け） | `false` |
 | `-v`, `--verbose` | DEBUGレベルのログ出力 | `false` |
 | `-h`, `--help` / `--version` | ヘルプ / バージョン表示 | — |
 

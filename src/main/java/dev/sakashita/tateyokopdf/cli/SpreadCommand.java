@@ -2,6 +2,7 @@ package dev.sakashita.tateyokopdf.cli;
 
 import dev.sakashita.tateyokopdf.application.SpreadOptions;
 import dev.sakashita.tateyokopdf.application.SpreadService;
+import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
 import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
@@ -77,13 +78,15 @@ public final class SpreadCommand {
 
       @Nullable String directionValue = cmd.getOptionValue("direction");
       ReadingDirection direction = parseDirection(directionValue != null ? directionValue : "RTL");
-      boolean coverSingle = cmd.hasOption("cover-single");
+      FirstPageMode firstPageMode =
+          resolveFirstPage(
+              cmd.getOptionValue("first-page"), cmd.hasOption("cover-single"), direction);
       boolean pdfA = cmd.hasOption("pdf-a");
       boolean lowMemory = cmd.hasOption("low-memory");
       @Nullable String outputOpt = cmd.getOptionValue("output");
 
       return execute(
-          InputResolver.resolve(positionals), outputOpt, direction, coverSingle, pdfA, lowMemory);
+          InputResolver.resolve(positionals), outputOpt, direction, firstPageMode, pdfA, lowMemory);
     } catch (ParseException e) {
       System.err.println("Error: " + e.getMessage());
       printHelp(System.err);
@@ -100,7 +103,7 @@ public final class SpreadCommand {
       InputResolver.Resolved resolved,
       @Nullable String outputOpt,
       ReadingDirection direction,
-      boolean coverSingle,
+      FirstPageMode firstPageMode,
       boolean pdfA,
       boolean lowMemory)
       throws IOException, ParseException {
@@ -115,7 +118,7 @@ public final class SpreadCommand {
           (outputOpt == null || "-".equals(outputOpt))
               ? OutputTarget.stdout()
               : OutputTarget.file(Path.of(outputOpt));
-      convertStdin(factory, calculator, postProcessor, target, direction, coverSingle, pdfA);
+      convertStdin(factory, calculator, postProcessor, target, direction, firstPageMode, pdfA);
       return CliExitCodes.OK;
     }
 
@@ -134,7 +137,7 @@ public final class SpreadCommand {
           input,
           singleOutput(input, outputOpt),
           direction,
-          coverSingle,
+          firstPageMode,
           pdfA,
           null);
       return CliExitCodes.OK;
@@ -157,7 +160,7 @@ public final class SpreadCommand {
             input,
             batchOutput(input, outDir),
             direction,
-            coverSingle,
+            firstPageMode,
             pdfA,
             label);
       } catch (Exception e) {
@@ -179,7 +182,7 @@ public final class SpreadCommand {
       PdfPostProcessor postProcessor,
       OutputTarget target,
       ReadingDirection direction,
-      boolean coverSingle,
+      FirstPageMode firstPageMode,
       boolean pdfA)
       throws IOException {
     Path tmpIn = Files.createTempFile("tate-yoko-in", ".pdf");
@@ -187,7 +190,7 @@ public final class SpreadCommand {
       // Files.copy(InputStream, ...) does not close System.in.
       Files.copy(System.in, tmpIn, StandardCopyOption.REPLACE_EXISTING);
       convertFile(
-          factory, calculator, postProcessor, tmpIn, target, direction, coverSingle, pdfA, null);
+          factory, calculator, postProcessor, tmpIn, target, direction, firstPageMode, pdfA, null);
     } finally {
       Files.deleteIfExists(tmpIn);
     }
@@ -200,7 +203,7 @@ public final class SpreadCommand {
       Path input,
       OutputTarget target,
       ReadingDirection direction,
-      boolean coverSingle,
+      FirstPageMode firstPageMode,
       boolean pdfA,
       @Nullable String label)
       throws IOException {
@@ -208,7 +211,7 @@ public final class SpreadCommand {
     boolean toStdout = target.toStdout();
     Path realOut = toStdout ? Files.createTempFile("tate-yoko-out", ".pdf") : target.requireFile();
     try {
-      var options = new SpreadOptions(input, realOut, direction, coverSingle, pdfA);
+      var options = new SpreadOptions(input, realOut, direction, firstPageMode, pdfA);
       var service =
           new SpreadService(factory, calculator, postProcessor, new ConsoleProgressListener(label));
       service.execute(options);
@@ -283,6 +286,36 @@ public final class SpreadCommand {
     }
   }
 
+  /**
+   * Resolves the opening mode from {@code --first-page} (an absolute side or {@code cover}) plus
+   * the deprecated {@code --cover-single} alias, given the reading direction. An absolute side
+   * equals {@code STANDARD} when it falls on the direction's leading side (RTL→right, LTR→left);
+   * the opposite side requests a leading blank. Nothing specified → {@code STANDARD}.
+   */
+  private static FirstPageMode resolveFirstPage(
+      @Nullable String firstPage, boolean coverSingleAlias, ReadingDirection direction)
+      throws ParseException {
+    if (firstPage != null && coverSingleAlias) {
+      throw new ParseException("--first-page and --cover-single cannot be combined");
+    }
+    if (coverSingleAlias) {
+      return FirstPageMode.COVER; // deprecated alias for --first-page cover
+    }
+    if (firstPage == null) {
+      return FirstPageMode.STANDARD;
+    }
+    return switch (firstPage.toLowerCase(Locale.ROOT)) {
+      case "cover" -> FirstPageMode.COVER;
+      case "right" ->
+          direction == ReadingDirection.RTL ? FirstPageMode.STANDARD : FirstPageMode.LEADING_BLANK;
+      case "left" ->
+          direction == ReadingDirection.LTR ? FirstPageMode.STANDARD : FirstPageMode.LEADING_BLANK;
+      default ->
+          throw new ParseException(
+              "invalid first-page '" + firstPage + "' (expected right, left, or cover)");
+    };
+  }
+
   private static Options buildOptions() {
     Options options = new Options();
     options.addOption(
@@ -302,8 +335,17 @@ public final class SpreadCommand {
             .get());
     options.addOption(
         Option.builder()
+            .longOpt("first-page")
+            .hasArg()
+            .argName("right|left|cover")
+            .desc(
+                "Which side page 1 opens on: right, left, or a standalone cover"
+                    + " (default: the reading direction's natural side)")
+            .get());
+    options.addOption(
+        Option.builder()
             .longOpt("cover-single")
-            .desc("Treat the first page as a standalone cover spread")
+            .desc("Deprecated alias for --first-page cover")
             .get());
     options.addOption(
         Option.builder()
@@ -343,7 +385,9 @@ public final class SpreadCommand {
           -o, --output <FILE|DIR|->   Output path; a directory for batch; '-' for stdout
                                       (default: <input>_spread.pdf)
           -d, --direction <RTL|LTR>   Reading direction (default: RTL)
-              --cover-single          Treat the first page as a standalone cover spread
+              --first-page <right|left|cover>
+                                      Side page 1 opens on (default: direction's natural side);
+                                      'left' (RTL) leads with a blank, 'cover' stands page 1 alone
               --pdf-a                 Emit PDF/A-2b for archiving (best-effort; see docs)
               --low-memory            Spill page streams to a temp file to bound heap on huge scans
           -v, --verbose               Enable verbose (DEBUG) logging
@@ -352,7 +396,7 @@ public final class SpreadCommand {
 
         Examples:
           tate-yoko-pdf novel.pdf                       -> novel_spread.pdf (RTL)
-          tate-yoko-pdf novel.pdf -o out.pdf            explicit output
+          tate-yoko-pdf novel.pdf --first-page left     page 1 on the left (leading blank)
           tate-yoko-pdf scans/ -o out/                  batch a directory
           cat in.pdf | tate-yoko-pdf - -o - > out.pdf   stdin -> stdout
         """);

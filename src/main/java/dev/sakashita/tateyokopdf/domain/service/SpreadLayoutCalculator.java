@@ -2,47 +2,55 @@ package dev.sakashita.tateyokopdf.domain.service;
 
 import dev.sakashita.tateyokopdf.domain.model.*;
 import java.util.Optional;
-import org.jspecify.annotations.Nullable;
 
+/**
+ * Positions source pages within a fixed two-page spread frame. Paired and single spreads share one
+ * placement routine: a page is centred within one half and shifted onto the leading or trailing
+ * side, where the side↔direction mapping lives solely in {@link #onRightHalf}.
+ */
 public class SpreadLayoutCalculator {
 
+  /**
+   * A spread of two facing pages: {@code first} on the leading half, {@code second} on the trailing
+   * half (RTL → first right/second left; LTR → mirrored).
+   */
   public SpreadLayout calculate(
-      ReadingDirection direction, PageDimension firstDim, @Nullable PageDimension secondDim) {
+      ReadingDirection direction, PageDimension first, PageDimension second) {
+    PageDimension bounds = PageDimension.max(first, second);
+    return new SpreadLayout(
+        spreadSpec(bounds),
+        place(direction, SpreadHalf.LEADING, bounds, first),
+        Optional.of(place(direction, SpreadHalf.TRAILING, bounds, second)));
+  }
 
-    PageDimension bounds = (secondDim != null) ? PageDimension.max(firstDim, secondDim) : firstDim;
+  /** A spread holding a single page on {@code half}; the opposite half is left blank. */
+  public SpreadLayout calculateSingle(
+      ReadingDirection direction, PageDimension page, SpreadHalf half) {
+    return new SpreadLayout(spreadSpec(page), place(direction, half, page, page), Optional.empty());
+  }
 
+  /** Always a full two-page width, so single and paired spreads share one frame size. */
+  private static SpreadSpec spreadSpec(PageDimension bounds) {
+    return new SpreadSpec(bounds.widthPt() * 2f, bounds.heightPt());
+  }
+
+  /**
+   * Centres {@code page} within one half (each half is {@code bounds.widthPt} wide) and shifts it
+   * onto the requested half; vertical position is centred against {@code bounds} too.
+   */
+  private static LayoutPosition place(
+      ReadingDirection direction, SpreadHalf half, PageDimension bounds, PageDimension page) {
     float halfWidth = bounds.widthPt();
-    float spreadWidth = halfWidth * 2;
-    float spreadHeight = bounds.heightPt();
-    SpreadSpec spec = new SpreadSpec(spreadWidth, spreadHeight);
-
-    float firstCenterX = (halfWidth - firstDim.widthPt()) / 2;
-    float firstCenterY = (spreadHeight - firstDim.heightPt()) / 2;
-
-    float firstOffsetX =
-        switch (direction) {
-          case RTL -> halfWidth + firstCenterX;
-          case LTR -> firstCenterX;
-        };
-
-    LayoutPosition firstPos = new LayoutPosition(firstOffsetX, firstCenterY);
-
-    Optional<LayoutPosition> secondPos;
-    if (secondDim != null) {
-      float secondCenterX = (halfWidth - secondDim.widthPt()) / 2;
-      float secondCenterY = (spreadHeight - secondDim.heightPt()) / 2;
-
-      float secondOffsetX =
-          switch (direction) {
-            case RTL -> secondCenterX;
-            case LTR -> halfWidth + secondCenterX;
-          };
-
-      secondPos = Optional.of(new LayoutPosition(secondOffsetX, secondCenterY));
-    } else {
-      secondPos = Optional.empty();
+    float x = (halfWidth - page.widthPt()) / 2f;
+    if (onRightHalf(direction, half)) {
+      x += halfWidth;
     }
+    float y = (bounds.heightPt() - page.heightPt()) / 2f;
+    return new LayoutPosition(x, y);
+  }
 
-    return new SpreadLayout(spec, firstPos, secondPos);
+  /** The right half is RTL's leading side and LTR's trailing side. */
+  private static boolean onRightHalf(ReadingDirection direction, SpreadHalf half) {
+    return (direction == ReadingDirection.RTL) == (half == SpreadHalf.LEADING);
   }
 }

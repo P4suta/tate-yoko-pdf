@@ -41,7 +41,7 @@ public class SpreadService {
       log.info("Source PDF: {} pages", totalPages);
 
       List<PagePairSpec> pairs =
-          PaginationStrategyFactory.from(options.coverSingle()).paginate(totalPages);
+          PaginationStrategyFactory.from(options.firstPageMode()).paginate(totalPages);
       progressListener.onStart(pairs.size());
 
       for (int i = 0; i < pairs.size(); i++) {
@@ -84,10 +84,10 @@ public class SpreadService {
         output.addSpread(layout.spec(), placements);
       }
 
-      case PagePairSpec.Single(var pageIndex) -> {
+      case PagePairSpec.Single(var pageIndex, var half) -> {
         PageDimension dim = source.pageDimension(pageIndex);
 
-        SpreadLayout layout = calculator.calculate(direction, dim, null);
+        SpreadLayout layout = calculator.calculateSingle(direction, dim, half);
 
         List<PagePlacement> placements =
             List.of(new PagePlacement(source.pageContent(pageIndex), layout.firstPosition()));
