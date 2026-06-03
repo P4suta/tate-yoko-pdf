@@ -21,4 +21,14 @@
     </Or>
   </Match>
 
+  <!--
+    RuntimeBenchmark reads /proc/<pid>/status to sample a child process's peak RSS (VmHWM) — the
+    Linux kernel's own high-water mark, and the most accurate portable source without native code.
+    The absolute path is inherent (procfs lives at /proc). Dev-only benchmark — never shipped.
+  -->
+  <Match>
+    <Bug pattern="DMI_HARDCODED_ABSOLUTE_FILENAME"/>
+    <Class name="dev.sakashita.tateyokopdf.tools.RuntimeBenchmark"/>
+  </Match>
+
 </FindBugsFilter>

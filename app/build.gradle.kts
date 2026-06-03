@@ -78,6 +78,32 @@ tasks.register<JavaExec>("createSamplePdf") {
     args = listOf("build/test-data/sample.pdf", "4")
 }
 
+// Runtime + memory benchmark (the Java successor to scripts/bench-runtime.sh). The harness spawns
+// the bundled app-image launcher as a child process, timing it with System.nanoTime and sampling
+// peak RSS from /proc/<pid>/status — pure Java, no GNU time. Override the warm-run count with
+// -Pruns=N and add files with -Pinputs="a.pdf b.pdf".
+tasks.register<JavaExec>("benchRuntime") {
+    group = "verification"
+    description = "Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md"
+    dependsOn("jpackageImage", "createSamplePdf")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.sakashita.tateyokopdf.tools.RuntimeBenchmark"
+    workingDir = rootDir
+    val runs = providers.gradleProperty("runs").getOrElse("5")
+    val extraInputs =
+        providers
+            .gradleProperty("inputs")
+            .orNull
+            ?.split(Regex("\\s+"))
+            ?.filter { it.isNotBlank() }
+            ?: emptyList()
+    val launcher = "app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf"
+    val qpdfBin = "app/build/dist-jpackage/tate-yoko-pdf/lib/app/bin/qpdf"
+    val inputs = extraInputs.ifEmpty { listOf("app/build/test-data/sample.pdf") }
+    args =
+        listOf(launcher, qpdfBin, "docs/perf-runtime.md", runs, "MaxRAMPercentage=75.0") + inputs
+}
+
 // ---- Distribution: jlink + jpackage app-image ------------------------------
 // Produces build/dist-jpackage/tate-yoko-pdf/ with a launcher, a trimmed JRE (jlink), and the
 // shadow jar. jlink/jpackage are invoked directly (Beryx 1.13.x is incompatible with Gradle 9.x).

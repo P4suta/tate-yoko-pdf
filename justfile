@@ -146,13 +146,13 @@ smoke: sample-pdf package
 sample-pdf:
     @just gradle :app:createSamplePdf
 
-# Unlike most recipes this runs the launcher NATIVELY on the host (not via
-# `dev-run`): the app-image bundles its own JRE, and going through the dev
-# container would add overhead that skews the wall-clock and RSS numbers.
-# Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md.
+# Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md. The
+# RuntimeBenchmark harness spawns the bundled app-image launcher and measures it in
+# pure Java (System.nanoTime for wall, /proc/<pid>/status VmHWM for peak RSS).
+# Override the warm-run count with `-Pruns=N` and add files with `-Pinputs="a.pdf b.pdf"`.
 [group('build')]
-bench-runtime: sample-pdf package
-    scripts/bench-runtime.sh
+bench-runtime:
+    @just gradle benchRuntime
 
 # Remove Gradle build outputs.
 [group('build')]
