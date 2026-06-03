@@ -82,36 +82,10 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Build app-image
         run: ./gradlew :app:jpackageImage :app:createSamplePdf --no-daemon
-      - name: CLI smoke (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          ./app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
-            app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
-          grep -q %PDF app/build/test-data/jpackage-out.pdf
-      - name: CLI smoke (macOS)
-        if: runner.os == 'macOS'
-        run: |
-          ./app/build/dist-jpackage/tate-yoko-pdf.app/Contents/MacOS/tate-yoko-pdf \
-            app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
-          grep -q %PDF app/build/test-data/jpackage-out.pdf
-      - name: CLI smoke (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # tate-yoko-pdf.exe is a console-subsystem launcher (built with
-          # --win-console) so its stdout/stderr reach the terminal. Start-Process
-          # -Wait blocks until the conversion finishes before the file read below.
-          $proc = Start-Process -Wait -NoNewWindow -PassThru `
-            -FilePath ".\app\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
-            -ArgumentList @(
-              'app\build\test-data\sample.pdf',
-              '-o',
-              'app\build\test-data\jpackage-out.pdf'
-            )
-          if ($proc.ExitCode -ne 0) { throw "tate-yoko-pdf.exe exited $($proc.ExitCode)" }
-          $bytes = [System.IO.File]::ReadAllBytes("app/build/test-data/jpackage-out.pdf")
-          $head = [System.Text.Encoding]::ASCII.GetString($bytes[0..3])
-          if ($head -ne '%PDF') { throw "Output is not a PDF: prefix=$head" }
+      # One cross-platform smoke check: SmokeCheck.java resolves the OS-specific launcher path,
+      # runs the conversion, and asserts the %PDF magic — replacing the old per-OS shell/pwsh steps.
+      - name: CLI smoke
+        run: ./gradlew :app:smokeCheck --no-daemon
       - name: Package app-image as zip (Linux)
         if: runner.os == 'Linux'
         run: |

@@ -134,12 +134,11 @@ shadow:
 package:
     @just gradle :app:jpackageImage
 
-# Build the app-image and convert a sample PDF through it (asserting `%PDF` magic on the output).
+# Build the app-image and convert a sample PDF through it, asserting `%PDF` magic on the output.
+# The cross-platform check lives in SmokeCheck.java (smokeCheck depends on the build tasks).
 [group('build')]
-smoke: sample-pdf package
-    @just dev-run ./app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
-    @just dev-run grep -q %PDF app/build/test-data/jpackage-out.pdf
-    @echo "✓ jpackage CLI smoke passed"
+smoke:
+    @just gradle smokeCheck
 
 # Generate a 4-page sample PDF at app/build/test-data/sample.pdf.
 [group('build')]

@@ -104,6 +104,33 @@ tasks.register<JavaExec>("benchRuntime") {
         listOf(launcher, qpdfBin, "docs/perf-runtime.md", runs, "MaxRAMPercentage=75.0") + inputs
 }
 
+// Cross-platform CLI smoke test (the Java successor to the per-OS shell / PowerShell CI steps):
+// convert sample.pdf through the built app-image and assert the output carries the %PDF magic. The
+// OS-specific launcher path is resolved here so one task works on every host.
+tasks.register<JavaExec>("smokeCheck") {
+    group = "verification"
+    description = "Convert a sample PDF through the built app-image and assert the output is a PDF"
+    dependsOn("jpackageImage", "createSamplePdf")
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass = "dev.sakashita.tateyokopdf.tools.SmokeCheck"
+    workingDir = rootDir
+    val os =
+        org.gradle.internal.os.OperatingSystem
+            .current()
+    val launcher =
+        when {
+            os.isMacOsX -> "app/build/dist-jpackage/tate-yoko-pdf.app/Contents/MacOS/tate-yoko-pdf"
+            os.isWindows -> "app/build/dist-jpackage/tate-yoko-pdf/tate-yoko-pdf.exe"
+            else -> "app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf"
+        }
+    args =
+        listOf(
+            launcher,
+            "app/build/test-data/sample.pdf",
+            "app/build/test-data/jpackage-out.pdf",
+        )
+}
+
 // ---- Distribution: jlink + jpackage app-image ------------------------------
 // Produces build/dist-jpackage/tate-yoko-pdf/ with a launcher, a trimmed JRE (jlink), and the
 // shadow jar. jlink/jpackage are invoked directly (Beryx 1.13.x is incompatible with Gradle 9.x).
