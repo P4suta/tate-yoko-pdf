@@ -1,0 +1,45 @@
+name: Docker dev image
+
+# The dev container (Dockerfile) is dev-only tooling — `just` recipes dispatch
+# into it locally. It is intentionally NOT built on every PR: that build pulls
+# buildkit + a base image from Docker Hub, which was the single biggest CI flake
+# source. Build it only when the container definition changes, plus a weekly cron
+# to catch upstream base-image / apt drift. This is never a required check, so a
+# Docker Hub hiccup here can never block a merge.
+on:
+  push:
+    branches: [main]
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker-compose.yml
+      - .dockerignore
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build dev image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v4
+      - name: Build dev image (BuildKit + GHA cache)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: dev
+          tags: tate-yoko-pdf-dev:latest
+          load: true
+          cache-from: type=gha,scope=dev-image
+          cache-to: type=gha,scope=dev-image,mode=max
+          build-args: |
+            DEV_UID=1001
+            DEV_GID=1001

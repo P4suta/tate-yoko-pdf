@@ -53,60 +53,16 @@ jobs:
             build/reports/spotbugs
           if-no-files-found: ignore
 
-  # Linux app-image build runs inside the dev container so the BellSoft apt repo
-  # provisioning (Liberica Full Edition with jmods) is fully reproducible. The
-  # CLI smoke verifies that PDFBox + AWT actually convert a real PDF end to end.
-  package-linux:
-    name: jpackage (ubuntu-latest)
-    needs: check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: write
-    env:
-      DEV_UID: 1001
-      DEV_GID: 1001
-    steps:
-      - uses: actions/checkout@v6
-      - name: Resolve runner UID/GID
-        run: |
-          echo "DEV_UID=$(id -u)" >> "$GITHUB_ENV"
-          echo "DEV_GID=$(id -g)" >> "$GITHUB_ENV"
-      - uses: docker/setup-buildx-action@v4
-      - name: Build dev image (BuildKit + GHA cache)
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          target: dev
-          tags: tate-yoko-pdf-dev:latest
-          load: true
-          cache-from: type=gha,scope=dev-image
-          cache-to: type=gha,scope=dev-image,mode=max
-          build-args: |
-            DEV_UID=${{ env.DEV_UID }}
-            DEV_GID=${{ env.DEV_GID }}
-      - name: Build app-image (jlink + jpackage) via Docker
-        run: docker compose run --rm dev ./gradlew jpackageImage createSamplePdf --no-daemon
-      - name: CLI smoke — real PDF conversion through the launcher
-        run: |
-          docker compose run --rm dev ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
-            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
-          docker compose run --rm dev grep -q %PDF build/test-data/jpackage-out.pdf
-      - name: Package app-image as zip
-        run: |
-          cd build/dist-jpackage
-          zip -r ../tate-yoko-pdf-linux.zip tate-yoko-pdf
-      - name: Upload tate-yoko-pdf-linux.zip
-        uses: actions/upload-artifact@v7
-        with:
-          name: tate-yoko-pdf-linux
-          path: build/tate-yoko-pdf-linux.zip
-          if-no-files-found: error
-
-  # macOS and Windows app-images are built directly on the GitHub-hosted runner
-  # because jpackage produces OS-native launchers (Contents/MacOS/<name> on
-  # macOS, <name>.exe on Windows) that can only be created on the matching host.
-  package-other:
+  # All three OS app-images build directly on the GitHub-hosted runner via
+  # setup-java (Liberica), which ships the jmods jlink needs. jpackage emits
+  # OS-native launchers (Contents/MacOS/<name> on macOS, <name>.exe on Windows),
+  # so each must build on its matching host.
+  #
+  # Linux used to build inside the dev container, but `docker/setup-buildx-action`
+  # pulling buildkit from Docker Hub was the single biggest CI flake source. Now
+  # every OS is on the same Docker-Hub-free path. The dev image itself is still
+  # exercised by docker-image.yml when the Dockerfile changes (and weekly).
+  package:
     name: jpackage (${{ matrix.os }})
     needs: check
     permissions:
@@ -115,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -126,6 +82,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
       - name: Build app-image
         run: ./gradlew jpackageImage createSamplePdf --no-daemon
+      - name: CLI smoke (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
+            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
+          grep -q %PDF build/test-data/jpackage-out.pdf
       - name: CLI smoke (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -150,6 +112,11 @@ jobs:
           $bytes = [System.IO.File]::ReadAllBytes("build/test-data/jpackage-out.pdf")
           $head = [System.Text.Encoding]::ASCII.GetString($bytes[0..3])
           if ($head -ne '%PDF') { throw "Output is not a PDF: prefix=$head" }
+      - name: Package app-image as zip (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          cd build/dist-jpackage
+          zip -r ../tate-yoko-pdf-linux.zip tate-yoko-pdf
       - name: Package app-image as zip (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -161,11 +128,11 @@ jobs:
         run: |
           Compress-Archive -Path build/dist-jpackage/tate-yoko-pdf `
             -DestinationPath build/tate-yoko-pdf-${{ matrix.os }}.zip
-      - name: Upload tate-yoko-pdf-${{ matrix.os }}.zip
+      - name: Upload app-image zip
         uses: actions/upload-artifact@v7
         with:
-          name: tate-yoko-pdf-${{ matrix.os }}
-          path: build/tate-yoko-pdf-${{ matrix.os }}.zip
+          name: tate-yoko-pdf-${{ runner.os == 'Linux' && 'linux' || matrix.os }}
+          path: build/tate-yoko-pdf-*.zip
           if-no-files-found: error
 
   # Surfaces recent main-branch CI wall-clock times in the run summary so any
@@ -173,7 +140,7 @@ jobs:
   # for the rolling history.
   perf-report:
     name: perf report
-    needs: [typos, check, package-linux, package-other]
+    needs: [typos, check, package]
     if: always()
     runs-on: ubuntu-latest
     permissions:
