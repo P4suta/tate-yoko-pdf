@@ -47,8 +47,3 @@ bin/
 
 ### jqwik database (property test cache)
 .jqwik-database
-
-### Removed SvelteKit frontend — ignore any local build leftovers (node_modules,
-### .svelte-kit, build, pnpm store) that linger until they are removed on the host.
-/frontend/
-.pnpm-store/
