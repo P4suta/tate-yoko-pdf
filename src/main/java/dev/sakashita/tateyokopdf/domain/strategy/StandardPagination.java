@@ -1,27 +1,18 @@
 package dev.sakashita.tateyokopdf.domain.strategy;
 
-import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
-import dev.sakashita.tateyokopdf.domain.exception.Validators;
 import dev.sakashita.tateyokopdf.domain.model.PagePairSpec;
 import java.util.ArrayList;
 import java.util.List;
 
+/** Pairs pages from the first: {@code 1·2, 3·4, …}; an odd final page becomes a leading single. */
 public final class StandardPagination implements PaginationStrategy {
 
   @Override
   public List<PagePairSpec> paginate(int totalPages) {
-    Validators.require(totalPages > 0, ErrorKind.PDF_INVALID_PAGE, "totalPages=" + totalPages);
+    Paginations.requirePages(totalPages);
 
     List<PagePairSpec> result = new ArrayList<>();
-
-    for (int i = 0; i < totalPages; i += 2) {
-      if (i + 1 < totalPages) {
-        result.add(new PagePairSpec.Pair(i, i + 1));
-      } else {
-        result.add(new PagePairSpec.Single(i));
-      }
-    }
-
+    Paginations.pairFrom(result, 0, totalPages);
     return List.copyOf(result);
   }
 }

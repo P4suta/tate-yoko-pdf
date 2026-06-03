@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
 import dev.sakashita.tateyokopdf.domain.model.PageDimension;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
@@ -51,7 +52,11 @@ final class SpreadServiceTest {
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     var opt =
         new SpreadOptions(
-            tmp.resolve("missing.pdf"), tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false);
+            tmp.resolve("missing.pdf"),
+            tmp.resolve("out.pdf"),
+            ReadingDirection.RTL,
+            FirstPageMode.STANDARD,
+            false);
     assertThatThrownBy(() -> service.execute(opt))
         .isInstanceOfSatisfying(
             SpreadException.class, ex -> assertThat(ex.kind()).isEqualTo(ErrorKind.PDF_NOT_FOUND));
@@ -72,7 +77,12 @@ final class SpreadServiceTest {
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     service.execute(
-        new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false));
+        new SpreadOptions(
+            inputFile,
+            tmp.resolve("out.pdf"),
+            ReadingDirection.RTL,
+            FirstPageMode.STANDARD,
+            false));
 
     var events = listener.events();
     assertThat(events).hasSize(4); // Start + 2 SpreadComplete + Complete
@@ -102,7 +112,11 @@ final class SpreadServiceTest {
             () ->
                 service.execute(
                     new SpreadOptions(
-                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false)))
+                        inputFile,
+                        tmp.resolve("out.pdf"),
+                        ReadingDirection.RTL,
+                        FirstPageMode.STANDARD,
+                        false)))
         .isInstanceOf(SpreadException.class);
 
     verify(source).close();
@@ -122,7 +136,9 @@ final class SpreadServiceTest {
 
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
-    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, false));
+    service.execute(
+        new SpreadOptions(
+            inputFile, outputFile, ReadingDirection.RTL, FirstPageMode.STANDARD, false));
 
     InOrder ord = inOrder(output);
     ord.verify(output).addSpread(any(), any());
@@ -142,7 +158,9 @@ final class SpreadServiceTest {
 
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, postProcessor, listener);
-    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, false));
+    service.execute(
+        new SpreadOptions(
+            inputFile, outputFile, ReadingDirection.RTL, FirstPageMode.STANDARD, false));
 
     // Order matters: the SpreadDocument must close (file handle release) and
     // save() must finish before qpdf opens the file; onComplete is the terminal
@@ -174,7 +192,11 @@ final class SpreadServiceTest {
             () ->
                 service.execute(
                     new SpreadOptions(
-                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false)))
+                        inputFile,
+                        tmp.resolve("out.pdf"),
+                        ReadingDirection.RTL,
+                        FirstPageMode.STANDARD,
+                        false)))
         .isInstanceOf(SpreadException.class);
 
     verify(postProcessor, never()).process(any());
@@ -193,7 +215,9 @@ final class SpreadServiceTest {
 
     var service =
         new SpreadService(factory, calc, PdfPostProcessor.noOp(), new CapturingProgressListener());
-    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, true));
+    service.execute(
+        new SpreadOptions(
+            inputFile, outputFile, ReadingDirection.RTL, FirstPageMode.STANDARD, true));
 
     // The XMP packet mirrors the info dictionary, so finalizePdfA must run after
     // applyMetadata; and it mutates the document, so it must run before save.
@@ -216,7 +240,12 @@ final class SpreadServiceTest {
     var service =
         new SpreadService(factory, calc, PdfPostProcessor.noOp(), new CapturingProgressListener());
     service.execute(
-        new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false));
+        new SpreadOptions(
+            inputFile,
+            tmp.resolve("out.pdf"),
+            ReadingDirection.RTL,
+            FirstPageMode.STANDARD,
+            false));
 
     verify(output, never()).finalizePdfA();
   }

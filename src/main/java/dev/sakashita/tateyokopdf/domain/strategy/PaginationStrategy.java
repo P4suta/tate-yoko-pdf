@@ -3,7 +3,8 @@ package dev.sakashita.tateyokopdf.domain.strategy;
 import dev.sakashita.tateyokopdf.domain.model.PagePairSpec;
 import java.util.List;
 
-public sealed interface PaginationStrategy permits StandardPagination, CoverSinglePagination {
+public sealed interface PaginationStrategy
+    permits StandardPagination, CoverSinglePagination, LeadingBlankPagination {
 
   List<PagePairSpec> paginate(int totalPages);
 }

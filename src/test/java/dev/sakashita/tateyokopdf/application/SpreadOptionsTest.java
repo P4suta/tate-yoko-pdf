@@ -3,6 +3,7 @@ package dev.sakashita.tateyokopdf.application;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNullPointerException;
 
+import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -12,11 +13,12 @@ final class SpreadOptionsTest {
   @Test
   void recordHoldsAllFields() {
     var opt =
-        new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.LTR, true, true);
+        new SpreadOptions(
+            Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.LTR, FirstPageMode.COVER, true);
     assertThat(opt.sourcePath()).isEqualTo(Path.of("a.pdf"));
     assertThat(opt.outputPath()).isEqualTo(Path.of("b.pdf"));
     assertThat(opt.direction()).isEqualTo(ReadingDirection.LTR);
-    assertThat(opt.coverSingle()).isTrue();
+    assertThat(opt.firstPageMode()).isEqualTo(FirstPageMode.COVER);
     assertThat(opt.pdfA()).isTrue();
   }
 
@@ -27,7 +29,9 @@ final class SpreadOptionsTest {
   void rejectsNullSourcePath() {
     assertThatNullPointerException()
         .isThrownBy(
-            () -> new SpreadOptions(null, Path.of("b.pdf"), ReadingDirection.RTL, false, false));
+            () ->
+                new SpreadOptions(
+                    null, Path.of("b.pdf"), ReadingDirection.RTL, FirstPageMode.STANDARD, false));
   }
 
   @Test
@@ -35,7 +39,9 @@ final class SpreadOptionsTest {
   void rejectsNullOutputPath() {
     assertThatNullPointerException()
         .isThrownBy(
-            () -> new SpreadOptions(Path.of("a.pdf"), null, ReadingDirection.RTL, false, false));
+            () ->
+                new SpreadOptions(
+                    Path.of("a.pdf"), null, ReadingDirection.RTL, FirstPageMode.STANDARD, false));
   }
 
   @Test
@@ -43,7 +49,19 @@ final class SpreadOptionsTest {
   void rejectsNullDirection() {
     assertThatNullPointerException()
         .isThrownBy(
-            () -> new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), null, false, false));
+            () ->
+                new SpreadOptions(
+                    Path.of("a.pdf"), Path.of("b.pdf"), null, FirstPageMode.STANDARD, false));
+  }
+
+  @Test
+  @SuppressWarnings("NullAway")
+  void rejectsNullFirstPageMode() {
+    assertThatNullPointerException()
+        .isThrownBy(
+            () ->
+                new SpreadOptions(
+                    Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.RTL, null, false));
   }
 
   @Test
@@ -51,7 +69,7 @@ final class SpreadOptionsTest {
     var opt = SpreadOptions.withDefaults(Path.of("/tmp/foo.pdf"));
     assertThat(opt.outputPath()).isEqualTo(Path.of("/tmp/foo_spread.pdf"));
     assertThat(opt.direction()).isEqualTo(ReadingDirection.DEFAULT);
-    assertThat(opt.coverSingle()).isFalse();
+    assertThat(opt.firstPageMode()).isEqualTo(FirstPageMode.STANDARD);
     assertThat(opt.pdfA()).isFalse();
   }
 

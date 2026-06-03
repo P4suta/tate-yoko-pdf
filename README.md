@@ -29,7 +29,8 @@
 ```bash
 ./tate-yoko-pdf novel.pdf                       # ゼロ設定でRTL見開き → novel_spread.pdf
 ./tate-yoko-pdf novel.pdf -o out/spread.pdf     # 出力先指定
-./tate-yoko-pdf novel.pdf --cover-single        # 表紙を単独見開きに
+./tate-yoko-pdf novel.pdf --first-page left     # 1ページ目を左始まり（先頭ブランク）
+./tate-yoko-pdf novel.pdf --first-page cover    # 表紙を単独見開きに（旧 --cover-single）
 ./tate-yoko-pdf textbook.pdf -d LTR             # 横書きPDF用
 ./tate-yoko-pdf a.pdf b.pdf c.pdf -o out/       # 複数ファイルをまとめて変換（-o はディレクトリ）
 ./tate-yoko-pdf scans/ -o out/                  # ディレクトリ直下の *.pdf を一括変換
@@ -43,7 +44,9 @@ cat in.pdf | ./tate-yoko-pdf - -o - > out.pdf   # stdin → stdout（Unix パイ
 | `INPUT...` | 入力PDF。**ファイル（複数可）/ ディレクトリ / `-`（stdin）**（必須） | — |
 | `-o`, `--output` | 出力先。単一→ファイル、複数/ディレクトリ入力→出力ディレクトリ、`-`→stdout | `<input>_spread.pdf` |
 | `-d`, `--direction` | 読み順: `RTL` または `LTR` | `RTL` |
-| `--cover-single` | 表紙を単独見開きにする | `false` |
+| `--first-page` | 1ページ目の開始側: `right` / `left` / `cover`（`left` は先頭ブランクで1ページ目を反対側に、`cover` は表紙を単独に）。`--cover-single` は `cover` の非推奨エイリアス | 読み方向の自然側 |
+| `--pdf-a` | PDF/A-2b を出力（保存用・ベストエフォルト） | `false` |
+| `--low-memory` | ページストリームを一時ファイルへ退避しヒープを抑制（巨大スキャン向け） | `false` |
 | `-v`, `--verbose` | DEBUGレベルのログ出力 | `false` |
 | `-h`, `--help` / `--version` | ヘルプ / バージョン表示 | — |
 
@@ -51,6 +54,20 @@ cat in.pdf | ./tate-yoko-pdf - -o - > out.pdf   # stdin → stdout（Unix パイ
 - **複数入力**（複数ファイル列挙 or ディレクトリ）は**バッチ処理**。`-o` を付けると出力ディレクトリ、省略すると各入力の隣に `_spread.pdf` を生成。バッチは1ファイル失敗しても続行し、最後に失敗があれば非0で終了します。
 - **`-`** は単独入力時のみ有効（stdin から1つのPDFを読む）。`-o -` で stdout へ出力するとパイプ連結できます。
 - **進捗・ログはすべて stderr** に出力されるため、`-o -` の stdout は純粋なPDFバイト列のままです。
+
+### 1ページ目の開き方（`--first-page`）
+
+見開きでは「1ページ目をどちら側から始めるか」で、以降のページの対向（どの2ページが同じ見開きに並ぶか）が変わります。`--first-page` でこれを明示できます（既定は読み方向の自然側＝RTLなら右）。以下はRTLの例で、数字は元PDFのページ番号、`▢` は空白の半分です。
+
+| 値 | 開き | 次 | 説明 |
+|---|---|---|---|
+| `right`（既定） | `[ 2 \| 1 ]` | `[ 4 \| 3 ]` | 1ページ目を読み始め側（右）に、2ページ目と対で配置（標準） |
+| `cover` | `[ ▢ \| 1 ]` | `[ 3 \| 2 ]` | 1ページ目を右に単独配置（表紙扱い）。以降 2·3 / 4·5 |
+| `left` | `[ 1 \| ▢ ]` | `[ 3 \| 2 ]` | 先頭に空白を1枚挟み、1ページ目を左に単独配置。以降 2·3 / 4·5 |
+
+- `left` と `cover` は「1ページ目を単独にして以降の対向を1つずらす」点は同じで、**1ページ目が左か右か**だけが異なります。
+- LTR（`-d LTR`）では左右が反転します（自然側は左）。
+- 旧 `--cover-single` は `--first-page cover` の非推奨エイリアスとして動作します（両方同時指定はエラー）。
 
 ---
 

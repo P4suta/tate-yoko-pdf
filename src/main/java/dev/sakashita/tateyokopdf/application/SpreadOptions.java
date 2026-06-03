@@ -1,5 +1,6 @@
 package dev.sakashita.tateyokopdf.application;
 
+import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -8,17 +9,22 @@ public record SpreadOptions(
     Path sourcePath,
     Path outputPath,
     ReadingDirection direction,
-    boolean coverSingle,
+    FirstPageMode firstPageMode,
     boolean pdfA) {
   public SpreadOptions {
     Objects.requireNonNull(sourcePath, "sourcePath must not be null");
     Objects.requireNonNull(outputPath, "outputPath must not be null");
     Objects.requireNonNull(direction, "direction must not be null");
+    Objects.requireNonNull(firstPageMode, "firstPageMode must not be null");
   }
 
   public static SpreadOptions withDefaults(Path sourcePath) {
     return new SpreadOptions(
-        sourcePath, deriveOutputPath(sourcePath), ReadingDirection.DEFAULT, false, false);
+        sourcePath,
+        deriveOutputPath(sourcePath),
+        ReadingDirection.DEFAULT,
+        FirstPageMode.STANDARD,
+        false);
   }
 
   private static Path deriveOutputPath(Path source) {
