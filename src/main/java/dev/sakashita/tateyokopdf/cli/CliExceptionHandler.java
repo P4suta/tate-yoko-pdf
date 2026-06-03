@@ -4,11 +4,13 @@ import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.observability.ExceptionMapper;
 import java.io.PrintStream;
 import java.util.function.BooleanSupplier;
-import picocli.CommandLine;
-import picocli.CommandLine.IExecutionExceptionHandler;
-import picocli.CommandLine.ParseResult;
 
-public final class CliExceptionHandler implements IExecutionExceptionHandler {
+/**
+ * Turns an exception thrown by the conversion pipeline into a user-facing {@code Error[KIND]: ...}
+ * line plus a sysexits-flavoured exit code. Kept framework-agnostic (no CLI-library types) so it
+ * can be called from a plain try/catch in {@link SpreadCommand#run}.
+ */
+public final class CliExceptionHandler {
 
   private final BooleanSupplier verboseSupplier;
   private final PrintStream err;
@@ -22,12 +24,11 @@ public final class CliExceptionHandler implements IExecutionExceptionHandler {
     this.err = err;
   }
 
-  @Override
-  public int handleExecutionException(Exception ex, CommandLine cmd, ParseResult parseResult) {
+  /** Reports {@code ex} to stderr and returns the exit code the process should terminate with. */
+  public int handle(Throwable ex) {
     ExceptionMapper.Mapping mapping = ExceptionMapper.map(ex);
     err.println("Error[" + mapping.kind() + "]: " + mapping.userMessage());
-    boolean verbose = verboseSupplier.getAsBoolean();
-    if (verbose) {
+    if (verboseSupplier.getAsBoolean()) {
       if (mapping.technicalDetail() != null) {
         err.println("  detail: " + mapping.technicalDetail());
       }

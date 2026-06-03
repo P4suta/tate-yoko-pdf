@@ -3,8 +3,7 @@
 # ships the `jmods/` directory, which jlink/jpackage consume to assemble the
 # bundled JRE for the app-image distribution. The default
 # `liberica-openjdk-debian:25` Docker image is Lite (no jmods) and therefore
-# unsuitable as a build base for jpackage. Node.js (NodeSource LTS 24, Active
-# LTS since 2025-10) drives the SvelteKit frontend build.
+# unsuitable as a build base for jpackage.
 FROM debian:trixie-slim AS dev
 
 RUN apt-get update \
@@ -19,15 +18,12 @@ RUN apt-get update \
       > /etc/apt/sources.list.d/bellsoft.list \
  && apt-get update \
  && apt-get install -y --no-install-recommends bellsoft-java25-full \
- && curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \
- && apt-get install -y --no-install-recommends nodejs \
- && corepack enable \
  && rm -rf /var/lib/apt/lists/*
 
 ENV JAVA_HOME=/usr/lib/jvm/bellsoft-java25-full-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
-ARG TYPOS_VERSION=1.46.3
+ARG TYPOS_VERSION=1.47.0
 RUN curl -fsSL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
   | tar -xz -C /usr/local/bin ./typos \
  && chmod +x /usr/local/bin/typos

@@ -25,6 +25,9 @@ jobs:
       - uses: crate-ci/typos@master
 
   check:
+    # Job name kept as "check (JVM + frontend)" to match the branch-protection
+    # required status check. The frontend is gone; rename the protected context
+    # to "check (JVM)" and this name together when updating branch protection.
     name: check (JVM + frontend)
     runs-on: ubuntu-latest
     permissions:
@@ -36,22 +39,12 @@ jobs:
         with:
           java-version: '25'
           distribution: 'liberica'
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - run: corepack enable
       # setup-gradle handles caches + writes a per-job Build dashboard to the run summary.
       - uses: gradle/actions/setup-gradle@v6
       - name: Install qpdf for the @EnabledIf linearization integration test
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends qpdf
-      - name: Gradle check (test + spotless + errorprone + nullaway + spotbugs + jacoco + frontend build)
+      - name: Gradle check (test + spotless + errorprone + nullaway + spotbugs + jacoco)
         run: ./gradlew check --no-daemon
-      - name: Frontend Biome lint (.ts/.js/.json)
-        working-directory: frontend
-        run: corepack pnpm run biome:check
-      - name: Frontend type check + svelte-check
-        working-directory: frontend
-        run: corepack pnpm run check
       - name: Upload test + SpotBugs reports
         if: always()
         uses: actions/upload-artifact@v7
@@ -133,11 +126,6 @@ jobs:
         with:
           java-version: '25'
           distribution: 'liberica'
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '24'
-      - name: Enable corepack
-        run: corepack enable
       - uses: gradle/actions/setup-gradle@v6
       - name: Build app-image
         run: ./gradlew jpackageImage createSamplePdf --no-daemon
@@ -151,10 +139,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          # Start-Process -Wait is required because tate-yoko-pdf.exe is built
-          # as a windowed-subsystem launcher (no --win-console). PowerShell's
-          # `&` operator only waits for console-subsystem programs; for windowed
-          # ones it returns immediately, racing the file read below.
+          # tate-yoko-pdf.exe is a console-subsystem launcher (built with
+          # --win-console) so its stdout/stderr reach the terminal. Start-Process
+          # -Wait blocks until the conversion finishes before the file read below.
           $proc = Start-Process -Wait -NoNewWindow -PassThru `
             -FilePath ".\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
             -ArgumentList @(

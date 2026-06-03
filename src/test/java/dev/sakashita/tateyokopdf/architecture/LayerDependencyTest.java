@@ -71,13 +71,10 @@ final class LayerDependencyTest {
           .resideInAnyPackage(
               "dev.sakashita.tateyokopdf.application..",
               "dev.sakashita.tateyokopdf.infrastructure..",
-              "dev.sakashita.tateyokopdf.web..",
               "dev.sakashita.tateyokopdf.cli..",
-              "dev.sakashita.tateyokopdf.tools..",
               "dev.sakashita.tateyokopdf.observability..",
-              "io.javalin..",
               "org.apache.pdfbox..",
-              "picocli..");
+              "org.apache.commons.cli..");
 
   /** Ports may speak the domain vocabulary but otherwise stay abstract. */
   @ArchTest
@@ -90,29 +87,22 @@ final class LayerDependencyTest {
           .resideInAnyPackage(
               "dev.sakashita.tateyokopdf.application..",
               "dev.sakashita.tateyokopdf.infrastructure..",
-              "dev.sakashita.tateyokopdf.web..",
               "dev.sakashita.tateyokopdf.cli..",
-              "dev.sakashita.tateyokopdf.tools..",
               "dev.sakashita.tateyokopdf.observability..",
-              "io.javalin..",
               "org.apache.pdfbox..",
-              "picocli..");
+              "org.apache.commons.cli..");
 
-  /** Web is the outermost shell — application must not depend on it. */
+  /** The CLI is the outermost shell — application must not depend on it. */
   @ArchTest
-  static final ArchRule applicationDoesNotDependOnWeb =
+  static final ArchRule applicationDoesNotDependOnCli =
       noClasses()
           .that()
           .resideInAPackage("dev.sakashita.tateyokopdf.application..")
           .should()
           .dependOnClassesThat()
-          .resideInAnyPackage(
-              "dev.sakashita.tateyokopdf.web..",
-              "dev.sakashita.tateyokopdf.cli..",
-              "io.javalin..",
-              "picocli..");
+          .resideInAnyPackage("dev.sakashita.tateyokopdf.cli..", "org.apache.commons.cli..");
 
-  /** Observability is cross-cutting — must not couple to UI surfaces (web/cli). */
+  /** Observability is cross-cutting — must not couple to the CLI surface. */
   @ArchTest
   static final ArchRule observabilityIndependentOfUi =
       noClasses()
@@ -120,11 +110,7 @@ final class LayerDependencyTest {
           .resideInAPackage("dev.sakashita.tateyokopdf.observability..")
           .should()
           .dependOnClassesThat()
-          .resideInAnyPackage(
-              "dev.sakashita.tateyokopdf.web..",
-              "dev.sakashita.tateyokopdf.cli..",
-              "io.javalin..",
-              "picocli..");
+          .resideInAnyPackage("dev.sakashita.tateyokopdf.cli..", "org.apache.commons.cli..");
 
   /** No package-level cycles. */
   @ArchTest

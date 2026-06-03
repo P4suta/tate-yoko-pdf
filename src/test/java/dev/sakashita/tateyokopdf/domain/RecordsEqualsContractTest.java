@@ -1,7 +1,6 @@
 package dev.sakashita.tateyokopdf.domain;
 
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
-import dev.sakashita.tateyokopdf.web.job.ProgressEvent;
 import nl.jqno.equalsverifier.EqualsVerifier;
 import org.junit.jupiter.api.DynamicTest;
 import org.junit.jupiter.api.TestFactory;
@@ -25,12 +24,7 @@ final class RecordsEqualsContractTest {
 
   @TestFactory
   Iterable<DynamicTest> records() {
-    return java.util.List.of(
-        record(LayoutPosition.class),
-        record(ProgressEvent.Started.class),
-        record(ProgressEvent.Progress.class),
-        record(ProgressEvent.Completed.class),
-        record(ProgressEvent.Failed.class));
+    return java.util.List.of(record(LayoutPosition.class));
   }
 
   private static DynamicTest record(Class<?> type) {

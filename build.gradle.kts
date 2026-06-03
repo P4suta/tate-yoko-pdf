@@ -7,12 +7,11 @@ import java.nio.file.Files
 import javax.inject.Inject
 
 // Apply security patches to the buildscript (plugin) classpath so Dependabot
-// alerts on transitive deps like plexus-utils / log4j-core / jackson-core
-// are resolved even though they only appear via Gradle plugins.
+// alerts on transitive deps like plexus-utils / log4j-core are resolved even
+// though they only appear via Gradle plugins.
 buildscript {
     val patches =
         mapOf(
-            "com.fasterxml.jackson.core:jackson-core" to "2.21.4",
             "org.codehaus.plexus:plexus-utils" to "4.0.2",
             "org.apache.logging.log4j:log4j-core" to "2.26.0",
         )
@@ -33,7 +32,6 @@ plugins {
     id("net.ltgt.errorprone") version "5.1.0"
     id("com.github.spotbugs") version "6.5.5"
     id("com.github.ben-manes.versions") version "0.54.0"
-    id("com.github.node-gradle.node") version "7.1.0"
     id("org.openrewrite.rewrite") version "7.33.0"
     id("info.solidsoft.pitest") version "1.19.0"
 }
@@ -140,23 +138,16 @@ dependencies {
     qpdfCoords?.let { qpdfBinary(it) }
 
     implementation("org.apache.pdfbox:pdfbox:3.0.7")
-    implementation("info.picocli:picocli:4.7.7")
+    implementation("commons-cli:commons-cli:1.11.0")
     implementation("ch.qos.logback:logback-classic:1.5.33")
-    implementation("io.javalin:javalin:7.2.2")
-    implementation("com.fasterxml.jackson.core:jackson-databind:2.21.4")
-
-    implementation("net.logstash.logback:logstash-logback-encoder:9.0")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
-
-    annotationProcessor("info.picocli:picocli-codegen:4.7.7")
 
     errorprone("com.google.errorprone:error_prone_core:2.49.0")
     errorprone("com.uber.nullaway:nullaway:0.13.4")
 
     testImplementation("org.junit.jupiter:junit-jupiter:6.1.0")
     testImplementation("org.assertj:assertj-core:3.27.7")
-    testImplementation("io.javalin:javalin-testtools:7.2.2")
     testImplementation("org.mockito:mockito-core:5.23.0")
     testImplementation("org.mockito:mockito-junit-jupiter:5.23.0")
     testImplementation("nl.jqno.equalsverifier:equalsverifier:4.5")
@@ -169,8 +160,6 @@ dependencies {
 
     testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
     testFixturesImplementation("org.jspecify:jspecify:1.0.0")
-    testFixturesImplementation("io.javalin:javalin:7.2.2")
-    testFixturesImplementation("com.fasterxml.jackson.core:jackson-databind:2.21.4")
 }
 
 spotless {
@@ -195,7 +184,6 @@ tasks.withType<JavaCompile>().configureEach {
         check("NullAway", CheckSeverity.ERROR)
         option("NullAway:AnnotatedPackages", "dev.sakashita.tateyokopdf")
         option("NullAway:JSpecifyMode", "true")
-        option("NullAway:ExternalInitAnnotations", "picocli.CommandLine.Command")
     }
 }
 
@@ -235,7 +223,6 @@ tasks.withType<com.github.spotbugs.snom.SpotBugsTask>().configureEach {
 // `buildscript {}` block.)
 val securityPatches =
     mapOf(
-        "com.fasterxml.jackson.core:jackson-core" to "2.21.4",
         "org.codehaus.plexus:plexus-utils" to "4.0.2",
         "org.apache.logging.log4j:log4j-core" to "2.26.0",
     )
@@ -270,11 +257,7 @@ tasks.test {
 val jacocoClassExcludes =
     listOf(
         "dev/sakashita/tateyokopdf/infrastructure/pdfbox/tools/**",
-        "dev/sakashita/tateyokopdf/tools/**",
         "dev/sakashita/tateyokopdf/Main.class",
-        "dev/sakashita/tateyokopdf/web/WebLauncher.class",
-        "dev/sakashita/tateyokopdf/web/WebLauncher\$*.class",
-        "dev/sakashita/tateyokopdf/web/BrowserLauncher.class",
         // QpdfLinearizer is a thin out-of-process CLI wrapper. Its defensive
         // branches (bundled-JAR resolution, ProcessBuilder timeout, thread
         // interruption during waitFor) cannot be unit-tested without an
@@ -356,47 +339,6 @@ tasks.jacocoTestCoverageVerification {
                 counter = "BRANCH"
                 value = "COVEREDRATIO"
                 minimum = "0.60".toBigDecimal()
-            }
-        }
-        rule {
-            // WS pump (`onProgressWs` thread) and download streaming are exercised in M4
-            // end-to-end smoke tests; this baseline guards against regressions in submit/lookup.
-            // 0.45 (down from 0.50) after the JTE → SvelteKit migration removed PageController
-            // and JobController.showProgress/showResult — the package is smaller and a single
-            // uncovered streaming branch now moves the ratio more.
-            element = "PACKAGE"
-            includes = listOf("dev.sakashita.tateyokopdf.web.routes")
-            limit {
-                counter = "LINE"
-                value = "COVEREDRATIO"
-                minimum = "0.45".toBigDecimal()
-            }
-        }
-        rule {
-            element = "PACKAGE"
-            includes = listOf("dev.sakashita.tateyokopdf.web.job")
-            limit {
-                counter = "LINE"
-                value = "COVEREDRATIO"
-                minimum = "0.85".toBigDecimal()
-            }
-        }
-        rule {
-            element = "PACKAGE"
-            includes = listOf("dev.sakashita.tateyokopdf.web.lifecycle")
-            limit {
-                counter = "LINE"
-                value = "COVEREDRATIO"
-                minimum = "0.70".toBigDecimal()
-            }
-        }
-        rule {
-            element = "PACKAGE"
-            includes = listOf("dev.sakashita.tateyokopdf.observability")
-            limit {
-                counter = "LINE"
-                value = "COVEREDRATIO"
-                minimum = "0.80".toBigDecimal()
             }
         }
     }
@@ -586,7 +528,6 @@ tasks.register("checkExtraVersions") {
         println("--- security-patch pins (manual floors; bump when upstream catches up) ---")
         val securityPins =
             listOf(
-                Triple("jackson-core", "com.fasterxml.jackson.core", "jackson-core"),
                 Triple("plexus-utils", "org.codehaus.plexus", "plexus-utils"),
                 Triple("log4j-core", "org.apache.logging.log4j", "log4j-core"),
             )
@@ -712,108 +653,6 @@ tasks.register<JavaExec>("createSamplePdf") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass = "dev.sakashita.tateyokopdf.infrastructure.pdfbox.tools.SamplePdfGenerator"
     args = listOf("build/test-data/sample.pdf", "4")
-}
-
-// ---- Frontend API type contract codegen --------------------------------------
-// `ProgressEvent` (sealed + @JsonTypeInfo) and `ReadingDirection` (enum) are the
-// single source of truth for the WS/HTTP contract. Reflection inside
-// `ApiTypesGenerator` emits the matching `frontend/src/lib/types.ts`, and the
-// verify task wired into `check` fails CI if a developer forgets to re-run the
-// generator after a Java-side rename.
-val apiTypesFile = file("frontend/src/lib/types.ts")
-val apiCodegenInputs =
-    listOf(
-        "src/main/java/dev/sakashita/tateyokopdf/web/job/ProgressEvent.java",
-        "src/main/java/dev/sakashita/tateyokopdf/domain/model/ReadingDirection.java",
-        "src/main/java/dev/sakashita/tateyokopdf/tools/ApiTypesGenerator.java",
-    )
-
-tasks.register<JavaExec>("generateApiTypes") {
-    group = "frontend"
-    description = "Regenerate frontend/src/lib/types.ts from ProgressEvent + ReadingDirection"
-    classpath = sourceSets.main.get().runtimeClasspath
-    mainClass = "dev.sakashita.tateyokopdf.tools.ApiTypesGenerator"
-    args(apiTypesFile.absolutePath)
-    inputs.files(apiCodegenInputs)
-    outputs.file(apiTypesFile)
-}
-
-tasks.register<JavaExec>("regenerateApiTypesToTemp") {
-    classpath = sourceSets.main.get().runtimeClasspath
-    mainClass = "dev.sakashita.tateyokopdf.tools.ApiTypesGenerator"
-    val tempOut = layout.buildDirectory.file("generated/api/types.ts.expected")
-    args(tempOut.get().asFile.absolutePath)
-    inputs.files(apiCodegenInputs)
-    outputs.file(tempOut)
-}
-
-tasks.register("verifyApiTypesUpToDate") {
-    group = "verification"
-    description =
-        "Fail if frontend/src/lib/types.ts is stale w.r.t. ProgressEvent / ReadingDirection."
-    dependsOn("regenerateApiTypesToTemp")
-    val tempOut = layout.buildDirectory.file("generated/api/types.ts.expected")
-    val targetFile = apiTypesFile
-    inputs.files(apiCodegenInputs)
-    inputs.file(targetFile)
-    doLast {
-        val expected = tempOut.get().asFile.readText()
-        val actual = if (targetFile.exists()) targetFile.readText() else ""
-        if (expected != actual) {
-            throw GradleException(
-                "frontend/src/lib/types.ts is stale. Run `just generate-api-types` and commit.",
-            )
-        }
-    }
-}
-
-tasks.check { dependsOn("verifyApiTypesUpToDate") }
-
-// ---- SvelteKit frontend (Svelte 5 + TS + Vite + adapter-static) -------------
-// Node.js (with corepack-managed pnpm) is provided by the dev container or by
-// `actions/setup-node@v4` in CI; the plugin uses whatever pnpm is in PATH.
-node {
-    download = false
-    nodeProjectDir = file("frontend")
-}
-
-val installFrontendDeps =
-    tasks.register<com.github.gradle.node.pnpm.task.PnpmTask>("installFrontendDeps") {
-        group = "frontend"
-        description = "Install SvelteKit frontend dependencies via pnpm"
-        args = listOf("install", "--frozen-lockfile")
-        inputs.file("frontend/package.json")
-        inputs.file("frontend/pnpm-lock.yaml")
-        outputs.dir("frontend/node_modules")
-        outputs.cacheIf { false } // node_modules is too large/fan-out for the build cache
-    }
-
-val buildFrontend =
-    tasks.register<com.github.gradle.node.pnpm.task.PnpmTask>("buildFrontend") {
-        group = "frontend"
-        description = "Build the SvelteKit SPA (static output via adapter-static)"
-        dependsOn(installFrontendDeps)
-        args = listOf("run", "build")
-        inputs.files(
-            "frontend/svelte.config.js",
-            "frontend/vite.config.ts",
-            "frontend/tsconfig.json",
-            "frontend/package.json",
-            "frontend/pnpm-lock.yaml",
-        )
-        inputs.dir("frontend/src")
-        inputs.dir("frontend/static")
-        outputs.dir("frontend/build")
-    }
-
-// Stage the SvelteKit static output into the JAR under /static so Javalin's
-// staticFiles handler can serve it at runtime (root paths) while API/WS routes
-// own /api/* and /ws/*.
-tasks.processResources {
-    dependsOn(buildFrontend)
-    from("frontend/build") {
-        into("static")
-    }
 }
 
 // ---- Distribution: jlink + jpackage app-image ------------------------------
@@ -1011,11 +850,13 @@ val jpackageImage =
                 .archiveFileName
                 .get()
 
-        // Windows: no `--win-console`. The launcher attaches to the `windows`
-        // subsystem so double-click does not spawn a black console window.
-        // The trade-off (CLI users can't see stdout/stderr live) is paid back
-        // by Main.java's RollingFileAppender at %APPDATA%/tate-yoko-pdf/logs/.
-        commandLine =
+        // CLI tool: on Windows, `--win-console` makes the launcher a console-subsystem
+        // app so stdout/stderr (help, progress, errors) show up in the terminal. Other
+        // OSes need no flag. Logging is stderr-only (see logback.xml); there is no file log.
+        val hostOs =
+            org.gradle.internal.os.OperatingSystem
+                .current()
+        val jpackageArgs =
             listOf(
                 toolPath("jpackage").get(),
                 "--type",
@@ -1037,6 +878,7 @@ val jpackageImage =
                 "--java-options",
                 "-Xmx2g",
             )
+        commandLine = if (hostOs.isWindows) jpackageArgs + "--win-console" else jpackageArgs
 
         inputs.dir(jreImageDir)
         inputs.dir(jpackageInputDir)

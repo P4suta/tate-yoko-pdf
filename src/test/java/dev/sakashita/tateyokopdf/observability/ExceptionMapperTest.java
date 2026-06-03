@@ -15,7 +15,6 @@ final class ExceptionMapperTest {
     var ex = SpreadException.of(ErrorKind.PDF_CORRUPTED);
     var mapping = ExceptionMapper.map(ex);
     assertThat(mapping.kind()).isEqualTo(ErrorKind.PDF_CORRUPTED);
-    assertThat(mapping.httpStatus()).isEqualTo(400);
     assertThat(mapping.logLevel()).isEqualTo(Level.WARN);
     assertThat(mapping.cliExitCode()).isEqualTo(65);
   }
@@ -24,7 +23,7 @@ final class ExceptionMapperTest {
   void mapsIllegalArgumentExceptionToInvalidParameter() {
     var mapping = ExceptionMapper.map(new IllegalArgumentException("bad"));
     assertThat(mapping.kind()).isEqualTo(ErrorKind.INVALID_PARAMETER);
-    assertThat(mapping.httpStatus()).isEqualTo(400);
+    assertThat(mapping.cliExitCode()).isEqualTo(64);
     assertThat(mapping.technicalDetail()).isEqualTo("bad");
   }
 
@@ -39,7 +38,6 @@ final class ExceptionMapperTest {
   void mapsOutOfMemoryErrorToDedicatedKind() {
     var mapping = ExceptionMapper.map(new OutOfMemoryError("heap"));
     assertThat(mapping.kind()).isEqualTo(ErrorKind.OUT_OF_MEMORY);
-    assertThat(mapping.httpStatus()).isEqualTo(503);
     assertThat(mapping.cliExitCode()).isEqualTo(137);
     assertThat(mapping.logLevel()).isEqualTo(Level.ERROR);
   }
@@ -48,7 +46,6 @@ final class ExceptionMapperTest {
   void mapsArbitraryIOExceptionToInternal() {
     var mapping = ExceptionMapper.map(new IOException("disk"));
     assertThat(mapping.kind()).isEqualTo(ErrorKind.INTERNAL);
-    assertThat(mapping.httpStatus()).isEqualTo(500);
     assertThat(mapping.logLevel()).isEqualTo(Level.ERROR);
   }
 

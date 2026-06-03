@@ -1,5 +1,5 @@
 # tate-yoko-pdf — task runner.
-# Common verbs: `just check` / `just smoke` / `just web` / `just shell`.
+# Common verbs: `just check` / `just smoke` / `just shell`.
 # Groups are surfaced by `just --list`. lefthook bypasses high-level recipes
 # and calls `just dev-run …` directly, so refactors here do not break hooks.
 
@@ -29,23 +29,9 @@ dev-run *args:
 gradle *args:
     @just dev-run ./gradlew {{args}}
 
-
-
-# Run pnpm (corepack-managed) inside the dev container, in frontend/.
-# Run pnpm (corepack-managed) inside the dev container with cwd = /workspace/frontend.
-# We can't compose via `dev-run bash -c '…'` because just's `*args` expansion
-# drops shell quoting — passing `-w` to docker is the safe equivalent.
-[private]
-pnpm *args:
-    @if [ -n "$(docker ps -q -f name=tate-yoko-pdf-dev-daemon)" ]; then \
-        docker compose exec -T -w /workspace/frontend dev-daemon corepack pnpm {{args}}; \
-    else \
-        docker compose run --rm -w /workspace/frontend dev corepack pnpm {{args}}; \
-    fi
-
 # ─── Dev container ───────────────────────────────────────────────────────────
 
-# Start the long-lived dev-daemon (keeps Gradle daemon + pnpm cache warm).
+# Start the long-lived dev-daemon (keeps the Gradle daemon + cache warm).
 [group('dev')]
 dev-up:
     docker compose --profile dev up -d dev-daemon
@@ -79,48 +65,32 @@ warmup:
 
 # ─── Quality ─────────────────────────────────────────────────────────────────
 
-# Apply every auto-fix the toolchain can derive: typos, spotless Java format,
-# biome + prettier for the frontend, plus regenerate the API type contract.
+# Apply every auto-fix the toolchain can derive: typos + spotless Java format.
 # OpenRewrite recipes are intentionally *not* applied here — those are
 # semantic transforms, opt-in via `just rewrite`.
 [group('quality')]
 format:
     -@just dev-run typos --write-changes
-    @just gradle generateApiTypes spotlessApply
-    @just pnpm run format
+    @just gradle spotlessApply
 
 # Full quality gate. Auto-applies every fixable finding first via `format`, then
-# verifies whatever Spotless / Error Prone / NullAway / SpotBugs / JaCoCo / Biome /
-# svelte-check raise that can't be auto-fixed. CI runs `./gradlew check` directly,
-# so any auto-fixes you forget to commit still get caught upstream.
+# verifies whatever Spotless / Error Prone / NullAway / SpotBugs / JaCoCo raise
+# that can't be auto-fixed. CI runs `./gradlew check` directly, so any auto-fixes
+# you forget to commit still get caught upstream.
 [group('quality')]
-check: format && lint
+check: format
     @just gradle check
 
 # Strict verify-only (no auto-fix). Mirrors CI behaviour for the rare case you
 # want to see what a clean-tree CI run would surface.
 [group('quality')]
-check-strict: && lint
+check-strict:
     @just gradle check
 
 # Backend tests only.
 [group('quality')]
 test:
     @just gradle test
-
-# Frontend Biome lint + svelte-check + Vitest unit tests (verify only —
-# auto-fixes live in `format`). `test:unit -- --run` is the one-shot CI form;
-# the default `test:unit` would otherwise drop into Vitest's watch UI.
-[group('quality')]
-lint:
-    @just pnpm run biome:check
-    @just pnpm run check
-    @just pnpm run test:unit -- --run
-
-# Regenerate frontend/src/lib/types.ts from the sealed ProgressEvent.
-[group('quality')]
-generate-api-types:
-    @just gradle generateApiTypes
 
 # Auto-fix typos across the repo.
 [group('quality')]
@@ -181,42 +151,19 @@ sample-pdf:
 clean:
     @just gradle clean
 
-# ─── Serve ───────────────────────────────────────────────────────────────────
-
-# Start the web app in JVM mode (background) on http://127.0.0.1:8080/.
-[group('serve')]
-web: shadow
-    docker compose --profile web up -d web
-    @echo "→ http://127.0.0.1:8080/"
-
-# Stop the web app.
-[group('serve')]
-web-stop:
-    -docker compose --profile web down web --remove-orphans
-
-# SvelteKit dev server (Vite HMR on :5173, /api & /ws proxied to :8080).
-[group('serve')]
-frontend-dev:
-    @just pnpm run dev --host 0.0.0.0
-
 # ─── Maintenance ─────────────────────────────────────────────────────────────
 
 # Whole-project outdated report: Gradle deps/plugins + Dockerfile pins +
-# security-patch floors + GitHub Actions (via checkExtraVersions) and frontend
-# pnpm caret-cross drift. Pre-push gate (`-PfailOnUpdates=true`) counts the
-# Gradle/Actions side toward the strict total; frontend drift is informational
-# here and bumped on demand via `pnpm update --latest`.
+# security-patch floors + GitHub Actions (via checkExtraVersions). Pre-push gate
+# (`-PfailOnUpdates=true`) counts the Gradle/Actions side toward the strict total.
 [group('maint')]
 outdated:
     @just gradle --console=plain --no-parallel --no-configuration-cache --warning-mode=none dependencyUpdates
-    @echo
-    @echo "=== Frontend (pnpm outdated) ==="
-    @just pnpm outdated || true
 
 # Remove this project's Docker artifacts (containers, networks, volumes, images). Confirmed prompt.
 [group('maint'), confirm("Remove tate-yoko-pdf's containers / volumes / images? [y/N]")]
 docker-clean:
-    docker compose --profile dev --profile web down -v --remove-orphans --rmi local
+    docker compose --profile dev down -v --remove-orphans --rmi local
 
 # Show Docker disk usage (machine-wide) and this project's state.
 [group('maint')]
@@ -224,7 +171,7 @@ docker-status:
     docker system df
     @echo
     @echo '--- tate-yoko-pdf ---'
-    -docker compose --profile dev --profile web ps -a
+    -docker compose --profile dev ps -a
     docker volume ls --filter 'label=com.docker.compose.project=tate-yoko-pdf'
 
 # Launch lazydocker TUI for machine-wide Docker state.

@@ -19,12 +19,6 @@ services:
       - .:/workspace
       - gradle-cache:/home/dev/.gradle
     working_dir: /workspace
-    environment:
-      TATE_YOKO_PORT: "8080"
-      TATE_YOKO_BIND: "0.0.0.0"
-      TATE_YOKO_NO_BROWSER: "true"
-    ports:
-      - "127.0.0.1:8080:8080"
     tty: true
     stdin_open: true
     command: ["bash"]
@@ -38,13 +32,6 @@ services:
     container_name: tate-yoko-pdf-dev-daemon
     profiles: ["dev"]
     command: ["tail", "-f", "/dev/null"]
-
-  web:
-    extends:
-      service: dev
-    container_name: tate-yoko-pdf-web
-    profiles: ["web"]
-    command: ["java", "-jar", "build/libs/tate-yoko-pdf-all.jar"]
 
 volumes:
   gradle-cache:
