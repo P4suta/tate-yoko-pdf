@@ -37,7 +37,7 @@ import org.jspecify.annotations.Nullable;
 public final class SpreadCommand {
 
   static final String NAME = "tate-yoko-pdf";
-  static final String VERSION = "tate-yoko-pdf 1.0.0";
+  static final String VERSION = "tate-yoko-pdf 2.0.0";
 
   private SpreadCommand() {}
 
@@ -78,9 +78,7 @@ public final class SpreadCommand {
 
       @Nullable String directionValue = cmd.getOptionValue("direction");
       ReadingDirection direction = parseDirection(directionValue != null ? directionValue : "RTL");
-      FirstPageMode firstPageMode =
-          resolveFirstPage(
-              cmd.getOptionValue("first-page"), cmd.hasOption("cover-single"), direction);
+      FirstPageMode firstPageMode = resolveFirstPage(cmd.getOptionValue("first-page"), direction);
       boolean pdfA = cmd.hasOption("pdf-a");
       boolean lowMemory = cmd.hasOption("low-memory");
       @Nullable String outputOpt = cmd.getOptionValue("output");
@@ -287,20 +285,13 @@ public final class SpreadCommand {
   }
 
   /**
-   * Resolves the opening mode from {@code --first-page} (an absolute side or {@code cover}) plus
-   * the deprecated {@code --cover-single} alias, given the reading direction. An absolute side
-   * equals {@code STANDARD} when it falls on the direction's leading side (RTL→right, LTR→left);
-   * the opposite side requests a leading blank. Nothing specified → {@code STANDARD}.
+   * Resolves the opening mode from {@code --first-page} (an absolute side or {@code cover}) given
+   * the reading direction. An absolute side equals {@code STANDARD} when it falls on the
+   * direction's leading side (RTL→right, LTR→left); the opposite side requests a leading blank.
+   * Nothing specified → {@code STANDARD}.
    */
   private static FirstPageMode resolveFirstPage(
-      @Nullable String firstPage, boolean coverSingleAlias, ReadingDirection direction)
-      throws ParseException {
-    if (firstPage != null && coverSingleAlias) {
-      throw new ParseException("--first-page and --cover-single cannot be combined");
-    }
-    if (coverSingleAlias) {
-      return FirstPageMode.COVER; // deprecated alias for --first-page cover
-    }
+      @Nullable String firstPage, ReadingDirection direction) throws ParseException {
     if (firstPage == null) {
       return FirstPageMode.STANDARD;
     }
@@ -341,11 +332,6 @@ public final class SpreadCommand {
             .desc(
                 "Which side page 1 opens on: right, left, or a standalone cover"
                     + " (default: the reading direction's natural side)")
-            .get());
-    options.addOption(
-        Option.builder()
-            .longOpt("cover-single")
-            .desc("Deprecated alias for --first-page cover")
             .get());
     options.addOption(
         Option.builder()

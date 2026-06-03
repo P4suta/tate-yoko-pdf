@@ -1,9 +1,9 @@
 package dev.sakashita.tateyokopdf.infrastructure.pdfbox;
 
-import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
+import dev.sakashita.tateyokopdf.domain.model.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.port.DocumentFactory;
 import dev.sakashita.tateyokopdf.port.SourceDocument;

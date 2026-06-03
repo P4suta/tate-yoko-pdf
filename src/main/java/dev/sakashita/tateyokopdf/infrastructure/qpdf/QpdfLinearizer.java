@@ -1,8 +1,8 @@
 package dev.sakashita.tateyokopdf.infrastructure.qpdf;
 
-import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.io.File;

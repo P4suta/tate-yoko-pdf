@@ -5,12 +5,12 @@ import static org.assertj.core.api.Assertions.assertThatNoException;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.within;
 
-import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
 import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
+import dev.sakashita.tateyokopdf.domain.model.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;

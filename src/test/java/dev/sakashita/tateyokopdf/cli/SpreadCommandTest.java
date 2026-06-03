@@ -34,7 +34,7 @@ final class SpreadCommandTest {
   void versionReturnsZero() {
     Captured c = run("--version");
     assertThat(c.code()).isZero();
-    assertThat(c.outText()).contains("tate-yoko-pdf 1.0.0");
+    assertThat(c.outText()).contains("tate-yoko-pdf 2.0.0");
   }
 
   @Test
@@ -68,15 +68,6 @@ final class SpreadCommandTest {
   }
 
   @Test
-  void coverSingleFlagAccepted(@TempDir Path tmp) throws Exception {
-    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 5);
-    Path output = tmp.resolve("out.pdf");
-    Captured c = run(input.toString(), "-o", output.toString(), "--cover-single");
-    assertThat(c.code()).isZero();
-    assertThat(Files.exists(output)).isTrue();
-  }
-
-  @Test
   void firstPageLeftAccepted(@TempDir Path tmp) throws Exception {
     Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 5);
     Path output = tmp.resolve("out.pdf");
@@ -107,13 +98,6 @@ final class SpreadCommandTest {
   void unknownFirstPageRejectedWithUsageCode(@TempDir Path tmp) throws Exception {
     Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
     Captured c = run(input.toString(), "--first-page", "sideways");
-    assertThat(c.code()).isEqualTo(CliExitCodes.USAGE);
-  }
-
-  @Test
-  void firstPageAndCoverSingleTogetherRejected(@TempDir Path tmp) throws Exception {
-    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
-    Captured c = run(input.toString(), "--first-page", "left", "--cover-single");
     assertThat(c.code()).isEqualTo(CliExitCodes.USAGE);
   }
 

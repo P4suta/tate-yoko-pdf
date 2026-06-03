@@ -1,6 +1,4 @@
-package dev.sakashita.tateyokopdf.application;
-
-import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
+package dev.sakashita.tateyokopdf.domain.model;
 
 /**
  * Single source of truth for the PDF version this app emits. Flip {@link #TARGET} to upgrade — both

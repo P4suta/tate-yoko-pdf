@@ -3,9 +3,9 @@ package dev.sakashita.tateyokopdf.infrastructure.qpdf;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import dev.sakashita.tateyokopdf.application.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
+import dev.sakashita.tateyokopdf.domain.model.PdfOutputPolicy;
 import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
