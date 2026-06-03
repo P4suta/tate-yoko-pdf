@@ -7,39 +7,18 @@
 <FindBugsFilter>
 
   <!--
-    EI_EXPOSE_REP / EI_EXPOSE_REP2: SpotBugs warns when a method returns or a
-    constructor stores a mutable object reference. This codebase keeps the
-    pattern narrow:
-      - JDK value-shaped types (Path, Instant, UUID) are effectively immutable.
-      - Shared service singletons (JobRegistry, ExecutorService variants,
-        UploadValidator, Job) are wired via manual DI and intentionally shared
-        between collaborators — that's the whole point of Ports & Adapters.
-      - SpreadException is immutable by construction.
-    A real exposure (e.g. of a byte[] or HashMap) still trips the check.
+    EI_EXPOSE_REP / EI_EXPOSE_REP2: SpotBugs warns when a constructor stores or a
+    method returns a mutable object reference. The JDK value-shaped types this
+    codebase holds in fields (Path, Instant) are effectively immutable, so the
+    warning is noise (e.g. QpdfLinearizer's qpdfBinary Path). A real exposure of a
+    genuinely mutable object (byte[], HashMap, …) still trips the check.
   -->
   <Match>
     <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
     <Or>
       <Field type="java.nio.file.Path"/>
       <Field type="java.time.Instant"/>
-      <Field type="java.util.UUID"/>
-      <Field type="java.util.concurrent.ExecutorService"/>
-      <Field type="java.util.concurrent.ThreadPoolExecutor"/>
-      <Field type="dev.sakashita.tateyokopdf.web.job.JobRegistry"/>
-      <Field type="dev.sakashita.tateyokopdf.web.job.Job"/>
-      <Field type="dev.sakashita.tateyokopdf.web.upload.UploadValidator"/>
-      <Field type="dev.sakashita.tateyokopdf.port.exception.SpreadException"/>
     </Or>
-  </Match>
-
-  <!--
-    HealthCheck.Report is always constructed via `new Report(status, Map.copyOf(...))`
-    so its `checks` field is structurally an immutable map. SpotBugs cannot see
-    the copyOf at the call site and warns generically about Map exposure.
-  -->
-  <Match>
-    <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
-    <Class name="dev.sakashita.tateyokopdf.observability.HealthCheck$Report"/>
   </Match>
 
 </FindBugsFilter>

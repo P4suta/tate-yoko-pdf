@@ -7,8 +7,11 @@ pipeline, stream-cache policy, or launcher heap options.
 
 - Date (UTC): 2026-06-03 04:50:52
 - Host: Linux 6.8.0-124-generic x86_64, 8 CPUs, RAM 15Gi
-- Launcher: `build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf` (heap: MaxRAMPercentage=75)
+- Launcher: `app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf` (heap: MaxRAMPercentage=75)
 - Samples per measurement: cold (1st run) + warm median of 5.
+- Inputs `doc A`–`doc D` are a private local corpus (not distributed); only their
+  page count and byte size are reported. `sample.pdf` is the generated fixture
+  (`just sample-pdf`). Re-run `just bench-runtime <your-files>` to refresh.
 
 ## Time breakdown (warm median of 5 runs)
 
@@ -23,10 +26,10 @@ boot **and** first-touch PDFBox/AWT/font init, so it exceeds the bare floor.
 | Input | Pages | Size (MiB) | E2E wall | Done (conv) | Startup＋init | qpdf alone | Cold wall |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | sample.pdf | 4 | 0.0 | 0.89s | 0.1s | 0.790s | 0.00s | 0.90s |
-| 省察.pdf | 102 | 4.6 | 1.19s | 0.4s | 0.790s | 0.04s | 1.18s |
-| テキスト4_ヒューム『人間知性研究』.pdf | 118 | 5.3 | 1.04s | 0.3s | 0.740s | 0.02s | 1.04s |
-| アンリ・ベルクソン『直接意識に与えられたものについての試論』.pdf | 316 | 34.6 | 1.32s | 0.6s | 0.720s | 0.12s | 1.27s |
-| 森正人『誰が場所をつくるのかポストヒューマニズム的試論』.pdf | 343 | 52.8 | 1.37s | 0.6s | 0.770s | 0.11s | 1.35s |
+| doc A | 102 | 4.6 | 1.19s | 0.4s | 0.790s | 0.04s | 1.18s |
+| doc B | 118 | 5.3 | 1.04s | 0.3s | 0.740s | 0.02s | 1.04s |
+| doc C | 316 | 34.6 | 1.32s | 0.6s | 0.720s | 0.12s | 1.27s |
+| doc D | 343 | 52.8 | 1.37s | 0.6s | 0.770s | 0.11s | 1.35s |
 
 ## Peak memory vs input size (warm median)
 
@@ -42,10 +45,10 @@ can read at or near the bare floor.)
 | Input | Pages | Size (MiB) | Peak RSS (MiB) | RSS/size |
 |---|---:|---:|---:|---:|
 | sample.pdf | 4 | 0.0 | 115 | — |
-| 省察.pdf | 102 | 4.6 | 147 | 32.1× |
-| テキスト4_ヒューム『人間知性研究』.pdf | 118 | 5.3 | 116 | 21.7× |
-| アンリ・ベルクソン『直接意識に与えられたものについての試論』.pdf | 316 | 34.6 | 167 | 4.8× |
-| 森正人『誰が場所をつくるのかポストヒューマニズム的試論』.pdf | 343 | 52.8 | 184 | 3.5× |
+| doc A | 102 | 4.6 | 147 | 32.1× |
+| doc B | 118 | 5.3 | 116 | 21.7× |
+| doc C | 316 | 34.6 | 167 | 4.8× |
+| doc D | 343 | 52.8 | 184 | 3.5× |
 
 ## Memory safety
 

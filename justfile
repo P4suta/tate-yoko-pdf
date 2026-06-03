@@ -124,27 +124,27 @@ mutation:
 
 # ─── Build & distribution ────────────────────────────────────────────────────
 
-# Build the fat shadowJar at build/libs/tate-yoko-pdf-all.jar.
+# Build the fat shadowJar at app/build/libs/tate-yoko-pdf-all.jar.
 [group('build')]
 shadow:
-    @just gradle shadowJar
+    @just gradle :app:shadowJar
 
-# Build the jpackage app-image (bundled JRE + shadow jar) under build/dist-jpackage/.
+# Build the jpackage app-image (bundled JRE + shadow jar) under app/build/dist-jpackage/.
 [group('build')]
 package:
-    @just gradle jpackageImage
+    @just gradle :app:jpackageImage
 
 # Build the app-image and convert a sample PDF through it (asserting `%PDF` magic on the output).
 [group('build')]
 smoke: sample-pdf package
-    @just dev-run ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
-    @just dev-run grep -q %PDF build/test-data/jpackage-out.pdf
+    @just dev-run ./app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
+    @just dev-run grep -q %PDF app/build/test-data/jpackage-out.pdf
     @echo "✓ jpackage CLI smoke passed"
 
-# Generate a 4-page sample PDF at build/test-data/sample.pdf.
+# Generate a 4-page sample PDF at app/build/test-data/sample.pdf.
 [group('build')]
 sample-pdf:
-    @just gradle createSamplePdf
+    @just gradle :app:createSamplePdf
 
 # Unlike most recipes this runs the launcher NATIVELY on the host (not via
 # `dev-run`): the app-image bundles its own JRE, and going through the dev

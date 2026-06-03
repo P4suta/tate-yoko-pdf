@@ -48,9 +48,9 @@ jobs:
         with:
           name: test-reports
           path: |
-            build/reports/tests/test
-            build/reports/jacoco/test/html
-            build/reports/spotbugs
+            */build/reports/tests/test
+            */build/reports/jacoco/test/html
+            */build/reports/spotbugs
           if-no-files-found: ignore
 
   # All three OS app-images build directly on the GitHub-hosted runner via
@@ -81,19 +81,19 @@ jobs:
           distribution: 'liberica'
       - uses: gradle/actions/setup-gradle@v6
       - name: Build app-image
-        run: ./gradlew jpackageImage createSamplePdf --no-daemon
+        run: ./gradlew :app:jpackageImage :app:createSamplePdf --no-daemon
       - name: CLI smoke (Linux)
         if: runner.os == 'Linux'
         run: |
-          ./build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
-            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
-          grep -q %PDF build/test-data/jpackage-out.pdf
+          ./app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf \
+            app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
+          grep -q %PDF app/build/test-data/jpackage-out.pdf
       - name: CLI smoke (macOS)
         if: runner.os == 'macOS'
         run: |
-          ./build/dist-jpackage/tate-yoko-pdf.app/Contents/MacOS/tate-yoko-pdf \
-            build/test-data/sample.pdf -o build/test-data/jpackage-out.pdf
-          grep -q %PDF build/test-data/jpackage-out.pdf
+          ./app/build/dist-jpackage/tate-yoko-pdf.app/Contents/MacOS/tate-yoko-pdf \
+            app/build/test-data/sample.pdf -o app/build/test-data/jpackage-out.pdf
+          grep -q %PDF app/build/test-data/jpackage-out.pdf
       - name: CLI smoke (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -102,37 +102,37 @@ jobs:
           # --win-console) so its stdout/stderr reach the terminal. Start-Process
           # -Wait blocks until the conversion finishes before the file read below.
           $proc = Start-Process -Wait -NoNewWindow -PassThru `
-            -FilePath ".\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
+            -FilePath ".\app\build\dist-jpackage\tate-yoko-pdf\tate-yoko-pdf.exe" `
             -ArgumentList @(
-              'build\test-data\sample.pdf',
+              'app\build\test-data\sample.pdf',
               '-o',
-              'build\test-data\jpackage-out.pdf'
+              'app\build\test-data\jpackage-out.pdf'
             )
           if ($proc.ExitCode -ne 0) { throw "tate-yoko-pdf.exe exited $($proc.ExitCode)" }
-          $bytes = [System.IO.File]::ReadAllBytes("build/test-data/jpackage-out.pdf")
+          $bytes = [System.IO.File]::ReadAllBytes("app/build/test-data/jpackage-out.pdf")
           $head = [System.Text.Encoding]::ASCII.GetString($bytes[0..3])
           if ($head -ne '%PDF') { throw "Output is not a PDF: prefix=$head" }
       - name: Package app-image as zip (Linux)
         if: runner.os == 'Linux'
         run: |
-          cd build/dist-jpackage
+          cd app/build/dist-jpackage
           zip -r ../tate-yoko-pdf-linux.zip tate-yoko-pdf
       - name: Package app-image as zip (macOS)
         if: runner.os == 'macOS'
         run: |
-          cd build/dist-jpackage
+          cd app/build/dist-jpackage
           zip -ry ../tate-yoko-pdf-${{ matrix.os }}.zip tate-yoko-pdf.app
       - name: Package app-image as zip (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          Compress-Archive -Path build/dist-jpackage/tate-yoko-pdf `
-            -DestinationPath build/tate-yoko-pdf-${{ matrix.os }}.zip
+          Compress-Archive -Path app/build/dist-jpackage/tate-yoko-pdf `
+            -DestinationPath app/build/tate-yoko-pdf-${{ matrix.os }}.zip
       - name: Upload app-image zip
         uses: actions/upload-artifact@v7
         with:
           name: tate-yoko-pdf-${{ runner.os == 'Linux' && 'linux' || matrix.os }}
-          path: build/tate-yoko-pdf-*.zip
+          path: app/build/tate-yoko-pdf-*.zip
           if-no-files-found: error
 
   # Surfaces recent main-branch CI wall-clock times in the run summary so any

@@ -30,8 +30,8 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-LAUNCHER="build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf"
-QPDF="build/dist-jpackage/tate-yoko-pdf/lib/app/bin/qpdf"
+LAUNCHER="app/build/dist-jpackage/tate-yoko-pdf/bin/tate-yoko-pdf"
+QPDF="app/build/dist-jpackage/tate-yoko-pdf/lib/app/bin/qpdf"
 OUT_DOC="docs/perf-runtime.md"
 RUNS="${RUNS:-5}"
 
@@ -78,12 +78,10 @@ declare -a INPUTS
 if [[ $# -gt 0 ]]; then
   INPUTS=("$@")
 else
+  # Default to the generated fixture only. Pass your own files as args for a
+  # larger corpus — private inputs are deliberately not committed to the repo.
   INPUTS=(
-    "build/test-data/sample.pdf"
-    "省察.pdf"
-    "テキスト4_ヒューム『人間知性研究』.pdf"
-    "アンリ・ベルクソン『直接意識に与えられたものについての試論』.pdf"
-    "森正人『誰が場所をつくるのかポストヒューマニズム的試論』.pdf"
+    "app/build/test-data/sample.pdf"
   )
 fi
 
