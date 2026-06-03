@@ -11,11 +11,13 @@ final class SpreadOptionsTest {
 
   @Test
   void recordHoldsAllFields() {
-    var opt = new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.LTR, true);
+    var opt =
+        new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), ReadingDirection.LTR, true, true);
     assertThat(opt.sourcePath()).isEqualTo(Path.of("a.pdf"));
     assertThat(opt.outputPath()).isEqualTo(Path.of("b.pdf"));
     assertThat(opt.direction()).isEqualTo(ReadingDirection.LTR);
     assertThat(opt.coverSingle()).isTrue();
+    assertThat(opt.pdfA()).isTrue();
   }
 
   // The rejects-null tests deliberately pass null to non-null params to exercise
@@ -24,21 +26,24 @@ final class SpreadOptionsTest {
   @SuppressWarnings("NullAway")
   void rejectsNullSourcePath() {
     assertThatNullPointerException()
-        .isThrownBy(() -> new SpreadOptions(null, Path.of("b.pdf"), ReadingDirection.RTL, false));
+        .isThrownBy(
+            () -> new SpreadOptions(null, Path.of("b.pdf"), ReadingDirection.RTL, false, false));
   }
 
   @Test
   @SuppressWarnings("NullAway")
   void rejectsNullOutputPath() {
     assertThatNullPointerException()
-        .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), null, ReadingDirection.RTL, false));
+        .isThrownBy(
+            () -> new SpreadOptions(Path.of("a.pdf"), null, ReadingDirection.RTL, false, false));
   }
 
   @Test
   @SuppressWarnings("NullAway")
   void rejectsNullDirection() {
     assertThatNullPointerException()
-        .isThrownBy(() -> new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), null, false));
+        .isThrownBy(
+            () -> new SpreadOptions(Path.of("a.pdf"), Path.of("b.pdf"), null, false, false));
   }
 
   @Test
@@ -47,6 +52,7 @@ final class SpreadOptionsTest {
     assertThat(opt.outputPath()).isEqualTo(Path.of("/tmp/foo_spread.pdf"));
     assertThat(opt.direction()).isEqualTo(ReadingDirection.DEFAULT);
     assertThat(opt.coverSingle()).isFalse();
+    assertThat(opt.pdfA()).isFalse();
   }
 
   @Test

@@ -17,6 +17,20 @@ public interface SpreadDocument extends AutoCloseable {
    */
   void applyMetadata(DocumentMetadata source, Instant modDate, String producer);
 
+  /**
+   * Add the structures that mark this document as PDF/A-2b: an sRGB output intent and an XMP packet
+   * carrying the {@code pdfaid} identification plus the standard Dublin Core / Adobe PDF / XMP
+   * Basic properties.
+   *
+   * <p>Call this <em>after</em> {@link #applyMetadata} — the XMP packet is built by mirroring the
+   * document information dictionary, so the two stay byte-for-byte consistent as PDF/A requires.
+   *
+   * <p>This adds conformance <em>structure</em> only; it does not rewrite page content. Whether the
+   * output actually validates depends on the embedded source pages (fonts must be embedded, colours
+   * device-independent or covered by the output intent).
+   */
+  void finalizePdfA();
+
   void save(Path destination);
 
   @Override
