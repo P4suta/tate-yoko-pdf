@@ -10,6 +10,7 @@ import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
+import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
 import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
@@ -166,6 +167,29 @@ final class PdfBoxSpreadDocumentTest {
       // XMP must mirror the info dictionary that applyMetadata populated.
       assertThat(xmp.getDublinCoreSchema().getTitle()).isEqualTo("題名");
       assertThat(xmp.getAdobePDFSchema().getProducer()).isEqualTo("tate-yoko-pdf");
+    }
+  }
+
+  @Test
+  void scratchFileCacheProducesParsablePdf(@TempDir Path tmp) throws Exception {
+    // A SCRATCH_FILE factory routes both source and output through
+    // createTempFileOnlyStreamCache(); spilling cloned page streams to disk must
+    // still yield a valid, correctly-paged output (one spread from two pages).
+    Path inputPdf = PdfFixtures.multiPageA4(tmp, "in.pdf", 6);
+    Path output = tmp.resolve("out.pdf");
+    var scratch = new PdfBoxDocumentFactory(MemoryMode.SCRATCH_FILE);
+    try (SourceDocument src = scratch.openSource(inputPdf);
+        SpreadDocument out = scratch.createOutput()) {
+      out.addSpread(
+          new SpreadSpec(1190f, 842f),
+          List.of(
+              new PagePlacement(src.pageContent(0), new LayoutPosition(595f, 0f)),
+              new PagePlacement(src.pageContent(1), new LayoutPosition(0f, 0f))));
+      out.save(output);
+    }
+
+    try (var doc = Loader.loadPDF(output.toFile())) {
+      assertThat(doc.getNumberOfPages()).isEqualTo(1);
     }
   }
 

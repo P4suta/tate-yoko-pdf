@@ -883,8 +883,13 @@ val jpackageImage =
                 jpackageOutputParent.get().asFile.absolutePath,
                 "--app-version",
                 project.version.toString(),
+                // Size the heap to the host instead of a fixed 2g: MaxRAMPercentage adapts
+                // to big and small machines alike (and respects container cgroup limits),
+                // so large scans get headroom on capable hosts without over-committing on
+                // small ones. For an enormous PDF on a constrained host, `--low-memory`
+                // additionally spills page streams to disk to keep heap bounded.
                 "--java-options",
-                "-Xmx2g",
+                "-XX:MaxRAMPercentage=75.0",
             )
         commandLine = if (hostOs.isWindows) jpackageArgs + "--win-console" else jpackageArgs
 

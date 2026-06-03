@@ -2,6 +2,7 @@ package dev.sakashita.tateyokopdf.cli;
 
 import dev.sakashita.tateyokopdf.application.SpreadOptions;
 import dev.sakashita.tateyokopdf.application.SpreadService;
+import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
 import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
@@ -78,9 +79,11 @@ public final class SpreadCommand {
       ReadingDirection direction = parseDirection(directionValue != null ? directionValue : "RTL");
       boolean coverSingle = cmd.hasOption("cover-single");
       boolean pdfA = cmd.hasOption("pdf-a");
+      boolean lowMemory = cmd.hasOption("low-memory");
       @Nullable String outputOpt = cmd.getOptionValue("output");
 
-      return execute(InputResolver.resolve(positionals), outputOpt, direction, coverSingle, pdfA);
+      return execute(
+          InputResolver.resolve(positionals), outputOpt, direction, coverSingle, pdfA, lowMemory);
     } catch (ParseException e) {
       System.err.println("Error: " + e.getMessage());
       printHelp(System.err);
@@ -98,10 +101,12 @@ public final class SpreadCommand {
       @Nullable String outputOpt,
       ReadingDirection direction,
       boolean coverSingle,
-      boolean pdfA)
+      boolean pdfA,
+      boolean lowMemory)
       throws IOException, ParseException {
 
-    DocumentFactory factory = new PdfBoxDocumentFactory();
+    MemoryMode memoryMode = lowMemory ? MemoryMode.SCRATCH_FILE : MemoryMode.IN_MEMORY;
+    DocumentFactory factory = new PdfBoxDocumentFactory(memoryMode);
     SpreadLayoutCalculator calculator = new SpreadLayoutCalculator();
     PdfPostProcessor postProcessor = QpdfLinearizer.create();
 
@@ -308,6 +313,14 @@ public final class SpreadCommand {
                     + " full validity depends on the source PDF's content)")
             .get());
     options.addOption(
+        Option.builder()
+            .longOpt("low-memory")
+            .desc(
+                "Spill page streams to a temp file instead of the heap; bounds memory for very"
+                    + " large scans on memory-constrained hosts (slightly slower; uses"
+                    + " java.io.tmpdir)")
+            .get());
+    options.addOption(
         Option.builder("v")
             .longOpt("verbose")
             .desc("Enable verbose logging output (DEBUG level)")
@@ -332,6 +345,7 @@ public final class SpreadCommand {
           -d, --direction <RTL|LTR>   Reading direction (default: RTL)
               --cover-single          Treat the first page as a standalone cover spread
               --pdf-a                 Emit PDF/A-2b for archiving (best-effort; see docs)
+              --low-memory            Spill page streams to a temp file to bound heap on huge scans
           -v, --verbose               Enable verbose (DEBUG) logging
           -h, --help                  Show this help and exit
               --version               Print version and exit

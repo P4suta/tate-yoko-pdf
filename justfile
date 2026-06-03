@@ -146,6 +146,14 @@ smoke: sample-pdf package
 sample-pdf:
     @just gradle createSamplePdf
 
+# Unlike most recipes this runs the launcher NATIVELY on the host (not via
+# `dev-run`): the app-image bundles its own JRE, and going through the dev
+# container would add overhead that skews the wall-clock and RSS numbers.
+# Benchmark conversion runtime + peak memory; writes docs/perf-runtime.md.
+[group('build')]
+bench-runtime: sample-pdf package
+    scripts/bench-runtime.sh
+
 # Remove Gradle build outputs.
 [group('build')]
 clean:
