@@ -30,7 +30,7 @@
 ./tate-yoko-pdf novel.pdf                       # ゼロ設定でRTL見開き → novel_spread.pdf
 ./tate-yoko-pdf novel.pdf -o out/spread.pdf     # 出力先指定
 ./tate-yoko-pdf novel.pdf --first-page left     # 1ページ目を左始まり（先頭ブランク）
-./tate-yoko-pdf novel.pdf --first-page cover    # 表紙を単独見開きに（旧 --cover-single）
+./tate-yoko-pdf novel.pdf --first-page cover    # 表紙を単独見開きに
 ./tate-yoko-pdf textbook.pdf -d LTR             # 横書きPDF用
 ./tate-yoko-pdf a.pdf b.pdf c.pdf -o out/       # 複数ファイルをまとめて変換（-o はディレクトリ）
 ./tate-yoko-pdf scans/ -o out/                  # ディレクトリ直下の *.pdf を一括変換
@@ -44,7 +44,7 @@ cat in.pdf | ./tate-yoko-pdf - -o - > out.pdf   # stdin → stdout（Unix パイ
 | `INPUT...` | 入力PDF。**ファイル（複数可）/ ディレクトリ / `-`（stdin）**（必須） | — |
 | `-o`, `--output` | 出力先。単一→ファイル、複数/ディレクトリ入力→出力ディレクトリ、`-`→stdout | `<input>_spread.pdf` |
 | `-d`, `--direction` | 読み順: `RTL` または `LTR` | `RTL` |
-| `--first-page` | 1ページ目の開始側: `right` / `left` / `cover`（`left` は先頭ブランクで1ページ目を反対側に、`cover` は表紙を単独に）。`--cover-single` は `cover` の非推奨エイリアス | 読み方向の自然側 |
+| `--first-page` | 1ページ目の開始側: `right` / `left` / `cover`（`left` は先頭ブランクで1ページ目を反対側に、`cover` は表紙を単独に） | 読み方向の自然側 |
 | `--pdf-a` | PDF/A-2b を出力（保存用・ベストエフォルト） | `false` |
 | `--low-memory` | ページストリームを一時ファイルへ退避しヒープを抑制（巨大スキャン向け） | `false` |
 | `-v`, `--verbose` | DEBUGレベルのログ出力 | `false` |
@@ -67,7 +67,6 @@ cat in.pdf | ./tate-yoko-pdf - -o - > out.pdf   # stdin → stdout（Unix パイ
 
 - `left` と `cover` は「1ページ目を単独にして以降の対向を1つずらす」点は同じで、**1ページ目が左か右か**だけが異なります。
 - LTR（`-d LTR`）では左右が反転します（自然側は左）。
-- 旧 `--cover-single` は `--first-page cover` の非推奨エイリアスとして動作します（両方同時指定はエラー）。
 
 ---
 
@@ -112,10 +111,10 @@ just                  # 利用可能なレシピ一覧
 just check            # test + spotless + errorprone + nullaway + spotbugs + jacoco
 just test             # テストのみ
 just format           # spotlessApply
-just shadow           # shadowJar 生成 (build/libs/tate-yoko-pdf-all.jar)
-just package          # jpackage app-image を build/dist-jpackage/ に生成
+just shadow           # shadowJar 生成 (app/build/libs/tate-yoko-pdf-all.jar)
+just package          # jpackage app-image を app/build/dist-jpackage/ に生成
 just smoke            # app-image をビルドして実 PDF 変換 smoke を回す
-just sample-pdf       # build/test-data/sample.pdf を生成
+just sample-pdf       # app/build/test-data/sample.pdf を生成
 just typos            # 誤字スキャン
 just typos-fix        # 誤字自動修正
 just shell            # devコンテナでシェル
@@ -143,30 +142,15 @@ just docker-clean     # 本プロジェクトの Docker artifacts を一掃
 
 ## アーキテクチャ
 
-ヘキサゴナルアーキテクチャ（Ports & Adapters）を採用し、ドメインロジックをPDFライブラリから完全に隔離しています。`LayerDependencyTest`（ArchUnit）が層間の依存方向をテストで強制します。
+ヘキサゴナル（Ports & Adapters）を採用し、ドメインロジックを PDF ライブラリから完全に隔離しています。v2.0.0 で各レイヤを **6つの Gradle モジュール**に物理分割し、PDFBox/qpdf の封じ込めやドメイン純粋性は ArchUnit ではなく**クラスパス上に相手が存在しないこと**でコンパイル時に強制されます。
 
 ```
-                ┌────────────────────────────┐
-                │  CLI (Apache Commons CLI)  │  ← primary adapter
-                └──────────────┬─────────────┘
-                               │
-                ┌──────────────▼─────────────┐
-                │  Application Layer          │
-                │  SpreadService (オーケストレーション) │
-                └──────┬───────────────┬──────┘
-                       │               │
-                ┌──────▼──────┐   ┌────▼─────────────────┐
-                │ Domain      │   │  Port Layer           │
-                │ (純粋Java)   │   │  SourceDocument /     │
-                │ Calculator  │   │  SpreadDocument /     │
-                │ Pagination  │   │  DocumentFactory      │
-                └─────────────┘   └────┬──────────────────┘
-                                       │ implements
-                                  ┌────▼──────────────────┐
-                                  │  Infrastructure        │
-                                  │  PDFBox 実装 / qpdf 後処理 │
-                                  └────────────────────────┘
+:app ──▶ :application ──▶ :port ──▶ :domain（純粋・依存なし）
+  ├────▶ :infrastructure ──▶ :port, :domain（PDFBox / qpdf はここだけ）
+  └────▶ :observability ──▶ :domain
 ```
+
+設計の俯瞰・各モジュールの責務・判断の背景（ADR）は **[docs/architecture.md](docs/architecture.md)** と **[docs/adr/](docs/adr/)** を参照してください。
 
 ---
 
@@ -199,10 +183,10 @@ just test     # テストのみ
 - **Unit** (`domain.*`, `application`, `domain.exception`, `observability`) — 純粋ロジック、外部依存なし
 - **Property-based** (`jqwik`) — Pagination / SpreadLayoutCalculator の不変条件を多数ケースで検証
 - **Integration** (`infrastructure.pdfbox` / `infrastructure.qpdf`) — 実 PDFBox / qpdf 経由で破損・暗号化・回転 PDF や linearize を扱う
-- **Architecture** (`architecture`) — ArchUnit で層境界を強制
+- **Architecture** (`architecture`、`:app`) — ArchUnit で残る2点（`domain.strategy` の直接生成禁止・パッケージ循環禁止）を強制。他の境界はモジュール分割によりコンパイル時に強制される
 - **CLI** (`cli`) — `SpreadCommand.run` を直接呼び stdout/stderr/exit code を assert（バッチ・stdin/stdout 含む）
 
-JaCoCo は層別 threshold で `check` の必須ゲート: `domain.*` 95% / `application` 85% / `infrastructure.*` 75% / 全体 78%。
+JaCoCo はモジュール別 threshold で `check` の必須ゲート: `:domain` 95%/90% / `:application` 85%/65% / `:infrastructure` 75%/60%（行/分岐）。
 
 ---
 
