@@ -10,19 +10,19 @@ import org.junit.jupiter.api.parallel.ResourceAccessMode;
 import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.api.parallel.Resources;
 
-@ResourceLock(value = Resources.SYSTEM_OUT, mode = ResourceAccessMode.READ_WRITE)
+@ResourceLock(value = Resources.SYSTEM_ERR, mode = ResourceAccessMode.READ_WRITE)
 final class ConsoleProgressListenerTest {
 
   @Test
   void onStartPrintsTotal() {
-    String out = captureStdout(() -> new ConsoleProgressListener().onStart(7));
+    String out = captureStderr(() -> new ConsoleProgressListener().onStart(7));
     assertThat(out).contains("Processing 7 spreads");
   }
 
   @Test
   void onSpreadCompleteUsesCarriageReturnForOverwrite() {
     String out =
-        captureStdout(
+        captureStderr(
             () -> {
               var l = new ConsoleProgressListener();
               l.onSpreadComplete(1, 4);
@@ -33,18 +33,31 @@ final class ConsoleProgressListenerTest {
 
   @Test
   void onCompletePrintsDurationWithOneDecimal() {
-    String out = captureStdout(() -> new ConsoleProgressListener().onComplete(1500));
+    String out = captureStderr(() -> new ConsoleProgressListener().onComplete(1500));
     assertThat(out).contains("Done in 1.5 seconds");
   }
 
-  private static String captureStdout(Runnable body) {
-    PrintStream original = System.out;
+  @Test
+  void labelIsPrefixedToEachLine() {
+    String out =
+        captureStderr(
+            () -> {
+              var l = new ConsoleProgressListener("[2/5] novel.pdf");
+              l.onStart(3);
+              l.onSpreadComplete(1, 3);
+            });
+    assertThat(out).contains("[2/5] novel.pdf Processing 3 spreads");
+    assertThat(out).contains("\r[2/5] novel.pdf [1/3]");
+  }
+
+  private static String captureStderr(Runnable body) {
+    PrintStream original = System.err;
     var buffer = new ByteArrayOutputStream();
-    System.setOut(new PrintStream(buffer, true, StandardCharsets.UTF_8));
+    System.setErr(new PrintStream(buffer, true, StandardCharsets.UTF_8));
     try {
       body.run();
     } finally {
-      System.setOut(original);
+      System.setErr(original);
     }
     return buffer.toString(StandardCharsets.UTF_8);
   }

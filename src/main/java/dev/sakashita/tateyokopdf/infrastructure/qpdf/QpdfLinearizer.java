@@ -11,7 +11,9 @@ import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
@@ -99,18 +101,26 @@ public final class QpdfLinearizer implements PdfPostProcessor {
       throw SpreadException.withDetail(
           ErrorKind.PDF_WRITE_FAILED, "qpdf input missing: " + path, null);
     }
+    // Write to a sibling temp file and move it over the target instead of using
+    // --replace-input. qpdf's --replace-input leaves a "<name>.~qpdf-orig" backup next to
+    // the output whenever it exits with warnings (code 3, which we accept), which litters
+    // the user's output directory — very visible in batch runs. An explicit out-file plus a
+    // move produces an identical linearized result while keeping the directory clean.
+    Path fileName = Objects.requireNonNull(path.getFileName());
+    Path tmpOut = path.resolveSibling(fileName + ".qpdf-tmp");
     ProcessBuilder pb =
         new ProcessBuilder(
                 qpdfBinary.toString(),
                 "--linearize",
                 "--min-version=" + targetVersion.label(),
-                "--replace-input",
-                path.toString())
+                path.toString(),
+                tmpOut.toString())
             .redirectErrorStream(true);
     try {
       Process process = pb.start();
       if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
         process.destroyForcibly();
+        deleteQuietly(tmpOut);
         throw SpreadException.withDetail(
             ErrorKind.PDF_WRITE_FAILED, "qpdf timed out after " + TIMEOUT_SECONDS + "s", null);
       }
@@ -118,15 +128,27 @@ public final class QpdfLinearizer implements PdfPostProcessor {
       // qpdf exits with 0 on success, 3 on warnings (which we accept), anything else is a failure.
       if (code != 0 && code != 3) {
         String tail = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+        deleteQuietly(tmpOut);
         throw SpreadException.withDetail(
             ErrorKind.PDF_WRITE_FAILED, "qpdf exit=" + code + " out=" + tail, null);
       }
+      Files.move(tmpOut, path, StandardCopyOption.REPLACE_EXISTING);
       log.debug("Linearised {} via qpdf exit={}", path.getFileName(), code);
     } catch (IOException e) {
+      deleteQuietly(tmpOut);
       throw SpreadException.withDetail(ErrorKind.PDF_WRITE_FAILED, "qpdf invocation failed", e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
+      deleteQuietly(tmpOut);
       throw SpreadException.withDetail(ErrorKind.INTERNAL, "qpdf interrupted", e);
+    }
+  }
+
+  private static void deleteQuietly(Path path) {
+    try {
+      Files.deleteIfExists(path);
+    } catch (IOException e) {
+      log.debug("Failed to delete qpdf temp file {}: {}", path, e.getMessage());
     }
   }
 

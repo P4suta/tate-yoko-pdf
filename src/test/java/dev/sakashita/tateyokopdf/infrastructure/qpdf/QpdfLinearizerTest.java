@@ -58,6 +58,12 @@ final class QpdfLinearizerTest {
     try (var doc = Loader.loadPDF(pdf.toFile())) {
       assertThat(doc.getVersion()).isEqualTo(PdfOutputPolicy.TARGET.headerValue());
     }
+
+    // (4) No backup/temp litter left next to the output — regression guard for the
+    //     --replace-input ".~qpdf-orig" leftover that surfaced in batch output directories.
+    try (var entries = Files.list(tmp)) {
+      assertThat(entries).containsExactly(pdf);
+    }
   }
 
   @Test

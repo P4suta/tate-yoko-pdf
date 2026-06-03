@@ -8,21 +8,12 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import org.junit.jupiter.api.Test;
-import picocli.CommandLine;
 
 final class CliExceptionHandlerTest {
 
-  @CommandLine.Command(name = "test-cmd")
-  static final class NoopCommand implements Runnable {
-    @Override
-    public void run() {}
-  }
-
-  private static int dispatch(Exception ex, boolean verbose, ByteArrayOutputStream errBuffer) {
+  private static int dispatch(Throwable ex, boolean verbose, ByteArrayOutputStream errBuffer) {
     var err = new PrintStream(errBuffer, true, StandardCharsets.UTF_8);
-    var handler = new CliExceptionHandler(() -> verbose, err);
-    var cmd = new CommandLine(new NoopCommand());
-    return handler.handleExecutionException(ex, cmd, cmd.parseArgs());
+    return new CliExceptionHandler(() -> verbose, err).handle(ex);
   }
 
   @Test

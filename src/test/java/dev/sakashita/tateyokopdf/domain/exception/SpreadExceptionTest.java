@@ -31,7 +31,7 @@ final class SpreadExceptionTest {
 
   @Test
   void messageOmitsTechnicalDetailWhenAbsent() {
-    var ex = SpreadException.of(ErrorKind.JOB_NOT_FOUND);
-    assertThat(ex.getMessage()).contains("JOB_NOT_FOUND").doesNotContain("(");
+    var ex = SpreadException.of(ErrorKind.PDF_PASSWORD_PROTECTED);
+    assertThat(ex.getMessage()).contains("PDF_PASSWORD_PROTECTED").doesNotContain("(");
   }
 }

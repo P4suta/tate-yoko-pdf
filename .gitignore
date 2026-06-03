@@ -48,11 +48,7 @@ bin/
 ### jqwik database (property test cache)
 .jqwik-database
 
-### Node / pnpm (SvelteKit frontend)
-node_modules/
+### Removed SvelteKit frontend — ignore any local build leftovers (node_modules,
+### .svelte-kit, build, pnpm store) that linger until they are removed on the host.
+/frontend/
 .pnpm-store/
-.svelte-kit/
-
-### Playwright (frontend e2e)
-test-results/
-playwright-report/
