@@ -10,6 +10,13 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Orchestrates one conversion: open the source, pair its pages via the {@link FirstPageMode}'s
+ * pagination strategy, lay out and write each spread, apply metadata, save, then post-process.
+ *
+ * <p>Pure orchestration over injected ports — it knows nothing about PDFBox or qpdf. Construct one
+ * per conversion; it holds no conversion state beyond its collaborators.
+ */
 public class SpreadService {
 
   private static final Logger log = LoggerFactory.getLogger(SpreadService.class);
@@ -30,6 +37,16 @@ public class SpreadService {
     this.progressListener = progressListener;
   }
 
+  /**
+   * Runs the conversion described by {@code options}: reads the source, writes one spread per page
+   * pair, applies metadata (and PDF/A structure when requested), saves the output, then runs the
+   * post-processor over the saved file.
+   *
+   * @param options the source, destination, and layout choices
+   * @throws dev.sakashita.tateyokopdf.domain.exception.SpreadException if the source is missing or
+   *     unreadable, or the output cannot be written (e.g. {@code PDF_NOT_FOUND}, {@code
+   *     PDF_CORRUPTED}, {@code PDF_WRITE_FAILED})
+   */
   public void execute(SpreadOptions options) {
     Validators.requireExists(options.sourcePath(), ErrorKind.PDF_NOT_FOUND);
     long startTime = System.currentTimeMillis();

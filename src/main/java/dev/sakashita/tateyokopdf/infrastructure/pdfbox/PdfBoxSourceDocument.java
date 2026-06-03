@@ -12,6 +12,7 @@ import org.apache.pdfbox.pdmodel.common.PDRectangle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/** PDFBox-backed {@link SourceDocument}: a read-only wrapper over a loaded {@code PDDocument}. */
 public class PdfBoxSourceDocument implements SourceDocument {
 
   private static final Logger log = LoggerFactory.getLogger(PdfBoxSourceDocument.class);

@@ -1,5 +1,11 @@
 package dev.sakashita.tateyokopdf.domain.exception;
 
+/**
+ * The taxonomy of failures the conversion can surface. Each kind carries a default Japanese
+ * user-facing message and a {@code clientFault} flag (true = caused by the input or usage, false =
+ * internal or environmental), which {@code ExceptionMapper} turns into a process exit code and log
+ * level. README's troubleshooting table is keyed by these names.
+ */
 public enum ErrorKind {
   PDF_CORRUPTED("PDFを読み込めませんでした。ファイルが破損している可能性があります。", true),
   PDF_PASSWORD_PROTECTED("PDFがパスワードで保護されているため処理できません。", true),
@@ -18,10 +24,14 @@ public enum ErrorKind {
     this.clientFault = clientFault;
   }
 
+  /** {@return the default Japanese message shown to the user for this kind} */
   public String defaultUserMessage() {
     return defaultUserMessage;
   }
 
+  /**
+   * {@return whether this failure is the caller's fault (bad input or usage) rather than internal}
+   */
   public boolean isClientFault() {
     return clientFault;
   }

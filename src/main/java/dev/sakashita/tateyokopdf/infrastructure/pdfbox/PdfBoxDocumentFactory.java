@@ -17,6 +17,11 @@ import org.apache.pdfbox.pdmodel.encryption.InvalidPasswordException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * PDFBox-backed {@link DocumentFactory}. Opens sources with {@code Loader.loadPDF} — mapping
+ * encryption and parse failures onto {@link SpreadException} — and creates outputs preconfigured
+ * with the target {@link PdfVersion} and a {@link MemoryMode}-selected stream cache.
+ */
 public class PdfBoxDocumentFactory implements DocumentFactory {
 
   private static final Logger log = LoggerFactory.getLogger(PdfBoxDocumentFactory.class);

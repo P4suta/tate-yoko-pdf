@@ -27,6 +27,11 @@ import org.apache.xmpbox.type.BadFieldValueException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * PDFBox-backed {@link SpreadDocument}: builds the output {@code PDDocument} one spread page at a
+ * time, drawing imported source pages as form XObjects, applying metadata, optionally stamping
+ * PDF/A structure (via {@link PdfAWriter}), and saving.
+ */
 public class PdfBoxSpreadDocument implements SpreadDocument {
 
   private static final Logger log = LoggerFactory.getLogger(PdfBoxSpreadDocument.class);

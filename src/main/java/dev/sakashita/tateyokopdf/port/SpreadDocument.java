@@ -6,8 +6,24 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 
+/**
+ * A writable output PDF assembled one spread at a time, then finalised and saved. The known adapter
+ * is {@code PdfBoxSpreadDocument}.
+ *
+ * <p>Not thread-safe. Expected lifecycle: {@link #addSpread} (repeatedly) → {@link #applyMetadata}
+ * → optionally {@link #finalizePdfA} → {@link #save} → {@link #close}. The caller owns the instance
+ * and must {@link #close()} it (try-with-resources).
+ */
 public interface SpreadDocument extends AutoCloseable {
 
+  /**
+   * Appends one spread page sized to {@code spec}, drawing each placement's content at its
+   * position.
+   *
+   * @param spec the spread page's dimensions, in points
+   * @param placements the pages to draw onto it (one for a single, two for a pair), each carrying
+   *     its own offset within the frame
+   */
   void addSpread(SpreadSpec spec, List<PagePlacement> placements);
 
   /**
@@ -31,8 +47,16 @@ public interface SpreadDocument extends AutoCloseable {
    */
   void finalizePdfA();
 
+  /**
+   * Writes the assembled document to {@code destination}.
+   *
+   * @param destination the file path to write
+   * @throws dev.sakashita.tateyokopdf.domain.exception.SpreadException {@code PDF_WRITE_FAILED} if
+   *     the file cannot be written
+   */
   void save(Path destination);
 
+  /** Releases the underlying document. Idempotent; never throws. */
   @Override
   void close();
 }

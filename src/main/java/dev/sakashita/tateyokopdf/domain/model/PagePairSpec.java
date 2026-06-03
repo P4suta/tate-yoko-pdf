@@ -4,8 +4,13 @@ import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.Validators;
 import java.util.Objects;
 
+/**
+ * One unit of pagination: either two source pages destined for one spread, or a lone page on one
+ * half. The sealed variants let the layout calculator and writer dispatch exhaustively.
+ */
 public sealed interface PagePairSpec {
 
+  /** Two consecutive source pages sharing a spread, by zero-based index. */
   record Pair(int firstIndex, int secondIndex) implements PagePairSpec {
     public Pair {
       Validators.requireNonNegative(firstIndex, ErrorKind.PDF_INVALID_PAGE, "firstIndex");

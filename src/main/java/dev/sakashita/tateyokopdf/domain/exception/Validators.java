@@ -4,6 +4,12 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.jspecify.annotations.Nullable;
 
+/**
+ * Precondition checks that throw {@link SpreadException} (tagged with a caller-supplied {@link
+ * ErrorKind}) instead of a bare {@code IllegalArgumentException}, so domain invariant violations
+ * speak the same error vocabulary as the rest of the pipeline. Each check returns its argument so
+ * it can be used inline.
+ */
 public final class Validators {
 
   private Validators() {}

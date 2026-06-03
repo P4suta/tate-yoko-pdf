@@ -5,6 +5,15 @@ import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import java.nio.file.Path;
 import java.util.Objects;
 
+/**
+ * The inputs to a single conversion: where to read, where to write, and how to lay out the spread.
+ *
+ * @param sourcePath the PDF to convert (non-null)
+ * @param outputPath where to write the result (non-null)
+ * @param direction the reading direction (non-null)
+ * @param firstPageMode how page 1 opens (non-null)
+ * @param pdfA whether to emit PDF/A-2b conformance structure
+ */
 public record SpreadOptions(
     Path sourcePath,
     Path outputPath,
@@ -18,6 +27,14 @@ public record SpreadOptions(
     Objects.requireNonNull(firstPageMode, "firstPageMode must not be null");
   }
 
+  /**
+   * Options for {@code sourcePath} with every other field defaulted: output written to {@code
+   * <name>_spread.pdf} beside the source, {@link ReadingDirection#DEFAULT} direction, {@link
+   * FirstPageMode#STANDARD} opening, and no PDF/A.
+   *
+   * @param sourcePath the PDF to convert
+   * @return default options for that source
+   */
   public static SpreadOptions withDefaults(Path sourcePath) {
     return new SpreadOptions(
         sourcePath,

@@ -354,6 +354,19 @@ tasks.jacocoTestCoverageVerification {
 
 tasks.check { dependsOn(tasks.jacocoTestCoverageVerification) }
 
+// Javadoc doclint: validate cross-references, HTML, and syntax of the Javadoc we ship.
+// `-missing` keeps the gate on correctness of written docs rather than exhaustive coverage of
+// every public member; tighten toward `all` once the coverage gap is fully closed. Wired into
+// `check` so a broken @link or malformed tag fails the build instead of rotting silently.
+tasks.withType<Javadoc>().configureEach {
+    (options as StandardJavadocDocletOptions).apply {
+        addStringOption("Xdoclint:all,-missing", "-quiet")
+        addBooleanOption("Werror", true)
+    }
+}
+
+tasks.check { dependsOn(tasks.javadoc) }
+
 // ---- `just outdated` plumbing -------------------------------------------------
 // 1. ben-manes.versions: only show stable upgrades (skip alpha/beta/rc/M*/SNAPSHOT)
 // 2. checkExtraVersions: diff non-Gradle pins (Dockerfile, spotless, jacoco,

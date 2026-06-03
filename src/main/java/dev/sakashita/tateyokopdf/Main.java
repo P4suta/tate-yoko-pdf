@@ -3,6 +3,7 @@ package dev.sakashita.tateyokopdf;
 import dev.sakashita.tateyokopdf.cli.SpreadCommand;
 import dev.sakashita.tateyokopdf.observability.FatalUncaughtHandler;
 
+/** Process entry point: installs the fatal-error handler, then hands off to the CLI. */
 public final class Main {
 
   private Main() {}

@@ -3,6 +3,12 @@ package dev.sakashita.tateyokopdf.domain.model;
 import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.Validators;
 
+/**
+ * A source page's displayed size in points (1/72 inch). Both dimensions must be positive.
+ *
+ * @param widthPt the width in points
+ * @param heightPt the height in points
+ */
 public record PageDimension(float widthPt, float heightPt) {
 
   public PageDimension {
