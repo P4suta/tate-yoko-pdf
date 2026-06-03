@@ -142,7 +142,7 @@ dependencies {
     // Dublin Core / Adobe PDF XMP packet required for PDF/A conformance.
     implementation("org.apache.pdfbox:xmpbox:3.0.7")
     implementation("commons-cli:commons-cli:1.11.0")
-    implementation("ch.qos.logback:logback-classic:1.5.33")
+    implementation("ch.qos.logback:logback-classic:1.5.34")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
@@ -162,7 +162,7 @@ dependencies {
     // genuinely PDF/A-2b compliant, not merely tagged as such. Test-only: never
     // ships in the application classpath. Brings its own PDF parser (no PDFBox
     // coupling), so it cannot drift from how a real archival validator reads us.
-    testImplementation("org.verapdf:validation-model:1.28.1")
+    testImplementation("org.verapdf:validation-model:1.30.1")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 

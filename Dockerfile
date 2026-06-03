@@ -23,7 +23,7 @@ RUN apt-get update \
 ENV JAVA_HOME=/usr/lib/jvm/bellsoft-java25-full-amd64
 ENV PATH=$JAVA_HOME/bin:$PATH
 
-ARG TYPOS_VERSION=1.47.0
+ARG TYPOS_VERSION=1.47.1
 RUN curl -fsSL "https://github.com/crate-ci/typos/releases/download/v${TYPOS_VERSION}/typos-v${TYPOS_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
   | tar -xz -C /usr/local/bin ./typos \
  && chmod +x /usr/local/bin/typos
