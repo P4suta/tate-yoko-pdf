@@ -8,14 +8,15 @@ import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
 import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
@@ -60,7 +61,7 @@ import org.slf4j.LoggerFactory;
 public final class QpdfLinearizer implements PdfPostProcessor {
 
   private static final Logger log = LoggerFactory.getLogger(QpdfLinearizer.class);
-  private static final long TIMEOUT_SECONDS = 60L;
+  private static final Duration TIMEOUT = Duration.ofSeconds(60);
   private static final Pattern PATH_SEPARATOR = Pattern.compile(Pattern.quote(File.pathSeparator));
 
   private final Path qpdfBinary;
@@ -113,33 +114,30 @@ public final class QpdfLinearizer implements PdfPostProcessor {
     // move produces an identical linearized result while keeping the directory clean.
     Path fileName = Objects.requireNonNull(path.getFileName());
     Path tmpOut = path.resolveSibling(fileName + ".qpdf-tmp");
-    ProcessBuilder pb =
-        new ProcessBuilder(
-                qpdfBinary.toString(),
-                "--linearize",
-                "--newline-before-endstream",
-                "--min-version=" + targetVersion.label(),
-                path.toString(),
-                tmpOut.toString())
-            .redirectErrorStream(true);
+    List<String> command =
+        List.of(
+            qpdfBinary.toString(),
+            "--linearize",
+            "--newline-before-endstream",
+            "--min-version=" + targetVersion.label(),
+            path.toString(),
+            tmpOut.toString());
     try {
-      Process process = pb.start();
-      if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
-        process.destroyForcibly();
-        deleteQuietly(tmpOut);
-        throw SpreadException.withDetail(
-            ErrorKind.PDF_WRITE_FAILED, "qpdf timed out after " + TIMEOUT_SECONDS + "s", null);
-      }
-      int code = process.exitValue();
+      ProcessRunner.Result result = new ProcessRunner().run(command, TIMEOUT);
       // qpdf exits with 0 on success, 3 on warnings (which we accept), anything else is a failure.
-      if (code != 0 && code != 3) {
-        String tail = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+      if (result.exitCode() != 0 && result.exitCode() != 3) {
         deleteQuietly(tmpOut);
         throw SpreadException.withDetail(
-            ErrorKind.PDF_WRITE_FAILED, "qpdf exit=" + code + " out=" + tail, null);
+            ErrorKind.PDF_WRITE_FAILED,
+            "qpdf exit=" + result.exitCode() + " out=" + result.mergedOutput(),
+            null);
       }
       Files.move(tmpOut, path, StandardCopyOption.REPLACE_EXISTING);
-      log.debug("Linearised {} via qpdf exit={}", path.getFileName(), code);
+      log.debug("Linearised {} via qpdf exit={}", path.getFileName(), result.exitCode());
+    } catch (TimeoutException e) {
+      deleteQuietly(tmpOut);
+      throw SpreadException.withDetail(
+          ErrorKind.PDF_WRITE_FAILED, "qpdf timed out after " + TIMEOUT.toSeconds() + "s", null);
     } catch (IOException e) {
       deleteQuietly(tmpOut);
       throw SpreadException.withDetail(ErrorKind.PDF_WRITE_FAILED, "qpdf invocation failed", e);

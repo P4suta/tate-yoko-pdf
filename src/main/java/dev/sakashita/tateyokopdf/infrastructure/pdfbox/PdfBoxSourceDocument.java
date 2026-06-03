@@ -15,6 +15,12 @@ import org.slf4j.LoggerFactory;
 public class PdfBoxSourceDocument implements SourceDocument {
 
   private static final Logger log = LoggerFactory.getLogger(PdfBoxSourceDocument.class);
+
+  // A page rotated a quarter or three-quarter turn presents its cropBox sideways, so the displayed
+  // width/height are swapped relative to the unrotated box.
+  private static final int QUARTER_TURN_DEGREES = 90;
+  private static final int THREE_QUARTER_TURN_DEGREES = 270;
+
   private final PDDocument document;
 
   PdfBoxSourceDocument(PDDocument document) {
@@ -35,12 +41,16 @@ public class PdfBoxSourceDocument implements SourceDocument {
     float width = cropBox.getWidth();
     float height = cropBox.getHeight();
 
-    if (rotation == 90 || rotation == 270) {
+    if (swapsDimensions(rotation)) {
       log.debug("Page {} has rotation={}, swapping dimensions", index, rotation);
       return new PageDimension(height, width);
     }
 
     return new PageDimension(width, height);
+  }
+
+  private static boolean swapsDimensions(int rotation) {
+    return rotation == QUARTER_TURN_DEGREES || rotation == THREE_QUARTER_TURN_DEGREES;
   }
 
   @Override

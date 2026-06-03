@@ -1,23 +1,15 @@
 package dev.sakashita.tateyokopdf.cli;
 
 import dev.sakashita.tateyokopdf.application.SpreadOptions;
-import dev.sakashita.tateyokopdf.application.SpreadService;
-import dev.sakashita.tateyokopdf.domain.model.FirstPageMode;
-import dev.sakashita.tateyokopdf.domain.model.MemoryMode;
-import dev.sakashita.tateyokopdf.domain.model.ReadingDirection;
 import dev.sakashita.tateyokopdf.domain.service.SpreadLayoutCalculator;
 import dev.sakashita.tateyokopdf.infrastructure.pdfbox.PdfBoxDocumentFactory;
 import dev.sakashita.tateyokopdf.infrastructure.qpdf.QpdfLinearizer;
 import dev.sakashita.tateyokopdf.observability.ExceptionMapper;
-import dev.sakashita.tateyokopdf.port.DocumentFactory;
-import dev.sakashita.tateyokopdf.port.PdfPostProcessor;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.DefaultParser;
@@ -30,8 +22,8 @@ import org.jspecify.annotations.Nullable;
  * Command-line front-end built on Apache Commons CLI.
  *
  * <p>Accepts one or more inputs (files, directories, or {@code -} for stdin), resolves them to
- * concrete PDFs via {@link InputResolver}, and runs {@link SpreadService} for each. Diagnostics and
- * progress go to stderr; with {@code -o -} the converted PDF is streamed to stdout as a clean
+ * concrete PDFs via {@link InputResolver}, and runs {@link FileConversion} for each. Diagnostics
+ * and progress go to stderr; with {@code -o -} the converted PDF is streamed to stdout as a clean
  * binary stream.
  */
 public final class SpreadCommand {
@@ -69,22 +61,11 @@ public final class SpreadCommand {
         System.out.println(VERSION);
         return CliExitCodes.OK;
       }
-
-      List<String> positionals = cmd.getArgList();
-      if (positionals.isEmpty()) {
+      if (cmd.getArgList().isEmpty()) {
         printHelp(System.out);
         return CliExitCodes.OK;
       }
-
-      @Nullable String directionValue = cmd.getOptionValue("direction");
-      ReadingDirection direction = parseDirection(directionValue != null ? directionValue : "RTL");
-      FirstPageMode firstPageMode = resolveFirstPage(cmd.getOptionValue("first-page"), direction);
-      boolean pdfA = cmd.hasOption("pdf-a");
-      boolean lowMemory = cmd.hasOption("low-memory");
-      @Nullable String outputOpt = cmd.getOptionValue("output");
-
-      return execute(
-          InputResolver.resolve(positionals), outputOpt, direction, firstPageMode, pdfA, lowMemory);
+      return execute(CliArguments.from(cmd));
     } catch (ParseException e) {
       System.err.println("Error: " + e.getMessage());
       printHelp(System.err);
@@ -97,26 +78,24 @@ public final class SpreadCommand {
 
   // ---- orchestration ------------------------------------------------------
 
-  private static int execute(
-      InputResolver.Resolved resolved,
-      @Nullable String outputOpt,
-      ReadingDirection direction,
-      FirstPageMode firstPageMode,
-      boolean pdfA,
-      boolean lowMemory)
-      throws IOException, ParseException {
+  private static int execute(CliArguments args) throws IOException, ParseException {
+    // Composition root: assemble the pipeline once, then dispatch per input.
+    FileConversion conversion =
+        new FileConversion(
+            new PdfBoxDocumentFactory(args.memoryMode()),
+            new SpreadLayoutCalculator(),
+            QpdfLinearizer.create(),
+            args);
 
-    MemoryMode memoryMode = lowMemory ? MemoryMode.SCRATCH_FILE : MemoryMode.IN_MEMORY;
-    DocumentFactory factory = new PdfBoxDocumentFactory(memoryMode);
-    SpreadLayoutCalculator calculator = new SpreadLayoutCalculator();
-    PdfPostProcessor postProcessor = QpdfLinearizer.create();
+    InputResolver.Resolved resolved = args.inputs();
+    @Nullable String outputOpt = args.outputOpt();
 
     if (resolved.stdin()) {
       OutputTarget target =
           (outputOpt == null || "-".equals(outputOpt))
               ? OutputTarget.stdout()
               : OutputTarget.file(Path.of(outputOpt));
-      convertStdin(factory, calculator, postProcessor, target, direction, firstPageMode, pdfA);
+      StdinSource.withStdinPdf(in -> conversion.convert(in, target, null));
       return CliExitCodes.OK;
     }
 
@@ -128,16 +107,7 @@ public final class SpreadCommand {
     // Single input: fail-fast — let the exception bubble up to run()'s mapper.
     if (files.size() == 1) {
       Path input = files.get(0);
-      convertFile(
-          factory,
-          calculator,
-          postProcessor,
-          input,
-          singleOutput(input, outputOpt),
-          direction,
-          firstPageMode,
-          pdfA,
-          null);
+      conversion.convert(input, singleOutput(input, outputOpt), null);
       return CliExitCodes.OK;
     }
 
@@ -151,16 +121,7 @@ public final class SpreadCommand {
       Path input = files.get(i);
       String label = "[" + (i + 1) + "/" + files.size() + "] " + input.getFileName();
       try {
-        convertFile(
-            factory,
-            calculator,
-            postProcessor,
-            input,
-            batchOutput(input, outDir),
-            direction,
-            firstPageMode,
-            pdfA,
-            label);
+        conversion.convert(input, batchOutput(input, outDir), label);
       } catch (Exception e) {
         failures++;
         ExceptionMapper.Mapping m = ExceptionMapper.map(e);
@@ -172,57 +133,6 @@ public final class SpreadCommand {
       return CliExitCodes.GENERIC_ERROR;
     }
     return CliExitCodes.OK;
-  }
-
-  private static void convertStdin(
-      DocumentFactory factory,
-      SpreadLayoutCalculator calculator,
-      PdfPostProcessor postProcessor,
-      OutputTarget target,
-      ReadingDirection direction,
-      FirstPageMode firstPageMode,
-      boolean pdfA)
-      throws IOException {
-    Path tmpIn = Files.createTempFile("tate-yoko-in", ".pdf");
-    try {
-      // Files.copy(InputStream, ...) does not close System.in.
-      Files.copy(System.in, tmpIn, StandardCopyOption.REPLACE_EXISTING);
-      convertFile(
-          factory, calculator, postProcessor, tmpIn, target, direction, firstPageMode, pdfA, null);
-    } finally {
-      Files.deleteIfExists(tmpIn);
-    }
-  }
-
-  private static void convertFile(
-      DocumentFactory factory,
-      SpreadLayoutCalculator calculator,
-      PdfPostProcessor postProcessor,
-      Path input,
-      OutputTarget target,
-      ReadingDirection direction,
-      FirstPageMode firstPageMode,
-      boolean pdfA,
-      @Nullable String label)
-      throws IOException {
-
-    boolean toStdout = target.toStdout();
-    Path realOut = toStdout ? Files.createTempFile("tate-yoko-out", ".pdf") : target.requireFile();
-    try {
-      var options = new SpreadOptions(input, realOut, direction, firstPageMode, pdfA);
-      var service =
-          new SpreadService(factory, calculator, postProcessor, new ConsoleProgressListener(label));
-      service.execute(options);
-      if (toStdout) {
-        // Files.copy(Path, OutputStream) does not close System.out.
-        Files.copy(realOut, System.out);
-        System.out.flush();
-      }
-    } finally {
-      if (toStdout) {
-        Files.deleteIfExists(realOut);
-      }
-    }
   }
 
   // ---- output resolution --------------------------------------------------
@@ -259,53 +169,7 @@ public final class SpreadCommand {
     return OutputTarget.file(outDir.resolve(name));
   }
 
-  /** Where a single conversion should write: a concrete file, or stdout. */
-  private record OutputTarget(boolean toStdout, @Nullable Path file) {
-    static OutputTarget stdout() {
-      return new OutputTarget(true, null);
-    }
-
-    static OutputTarget file(Path path) {
-      return new OutputTarget(false, path);
-    }
-
-    Path requireFile() {
-      return Objects.requireNonNull(file, "file target must have a path");
-    }
-  }
-
-  // ---- parsing helpers ----------------------------------------------------
-
-  private static ReadingDirection parseDirection(String value) throws ParseException {
-    try {
-      return ReadingDirection.valueOf(value.toUpperCase(Locale.ROOT));
-    } catch (IllegalArgumentException e) {
-      throw new ParseException("invalid direction '" + value + "' (expected RTL or LTR)");
-    }
-  }
-
-  /**
-   * Resolves the opening mode from {@code --first-page} (an absolute side or {@code cover}) given
-   * the reading direction. An absolute side equals {@code STANDARD} when it falls on the
-   * direction's leading side (RTL→right, LTR→left); the opposite side requests a leading blank.
-   * Nothing specified → {@code STANDARD}.
-   */
-  private static FirstPageMode resolveFirstPage(
-      @Nullable String firstPage, ReadingDirection direction) throws ParseException {
-    if (firstPage == null) {
-      return FirstPageMode.STANDARD;
-    }
-    return switch (firstPage.toLowerCase(Locale.ROOT)) {
-      case "cover" -> FirstPageMode.COVER;
-      case "right" ->
-          direction == ReadingDirection.RTL ? FirstPageMode.STANDARD : FirstPageMode.LEADING_BLANK;
-      case "left" ->
-          direction == ReadingDirection.LTR ? FirstPageMode.STANDARD : FirstPageMode.LEADING_BLANK;
-      default ->
-          throw new ParseException(
-              "invalid first-page '" + firstPage + "' (expected right, left, or cover)");
-    };
-  }
+  // ---- options & help -----------------------------------------------------
 
   private static Options buildOptions() {
     Options options = new Options();
