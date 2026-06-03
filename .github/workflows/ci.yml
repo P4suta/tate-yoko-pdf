@@ -25,10 +25,7 @@ jobs:
       - uses: crate-ci/typos@master
 
   check:
-    # Job name kept as "check (JVM + frontend)" to match the branch-protection
-    # required status check. The frontend is gone; rename the protected context
-    # to "check (JVM)" and this name together when updating branch protection.
-    name: check (JVM + frontend)
+    name: check (JVM)
     runs-on: ubuntu-latest
     permissions:
       contents: read
