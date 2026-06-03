@@ -20,6 +20,8 @@ import java.util.GregorianCalendar;
 import java.util.List;
 import java.util.function.Consumer;
 import javax.xml.transform.TransformerException;
+import org.apache.pdfbox.io.IOUtils;
+import org.apache.pdfbox.io.RandomAccessStreamCache.StreamCacheCreateFunction;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -47,7 +49,13 @@ public class PdfBoxSpreadDocument implements SpreadDocument {
   private final PdfVersion version;
 
   PdfBoxSpreadDocument(PdfVersion version) {
-    this.document = new PDDocument();
+    this(version, IOUtils.createMemoryOnlyStreamCache());
+  }
+
+  PdfBoxSpreadDocument(PdfVersion version, StreamCacheCreateFunction streamCache) {
+    // streamCache decides where cloned page streams live: heap (memory-only) or a
+    // temporary file (scratch). See MemoryMode / PdfBoxDocumentFactory.
+    this.document = new PDDocument(streamCache);
     this.version = version;
     // PDFBox 3.0.7 quirk: for any value >= 1.4 this only updates the catalog /Version entry,
     // NOT the %PDF-x.x header byte. The header byte is rewritten downstream by qpdf

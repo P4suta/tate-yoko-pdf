@@ -86,6 +86,18 @@ final class SpreadCommandTest {
   }
 
   @Test
+  void lowMemoryFlagAccepted(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 4);
+    Path output = tmp.resolve("out.pdf");
+    // --low-memory routes the conversion through the temp-file stream cache; it must
+    // still succeed and produce a non-empty PDF.
+    Captured c = run(input.toString(), "-o", output.toString(), "--low-memory");
+    assertThat(c.code()).isZero();
+    assertThat(Files.exists(output)).isTrue();
+    assertThat(Files.size(output)).isPositive();
+  }
+
+  @Test
   void ltrDirectionAccepted(@TempDir Path tmp) throws Exception {
     Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
     Path output = tmp.resolve("out.pdf");

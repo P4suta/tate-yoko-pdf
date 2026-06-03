@@ -142,7 +142,7 @@ dependencies {
     // Dublin Core / Adobe PDF XMP packet required for PDF/A conformance.
     implementation("org.apache.pdfbox:xmpbox:3.0.7")
     implementation("commons-cli:commons-cli:1.11.0")
-    implementation("ch.qos.logback:logback-classic:1.5.33")
+    implementation("ch.qos.logback:logback-classic:1.5.34")
 
     compileOnly("org.jspecify:jspecify:1.0.0")
 
@@ -162,7 +162,7 @@ dependencies {
     // genuinely PDF/A-2b compliant, not merely tagged as such. Test-only: never
     // ships in the application classpath. Brings its own PDF parser (no PDFBox
     // coupling), so it cannot drift from how a real archival validator reads us.
-    testImplementation("org.verapdf:validation-model:1.28.1")
+    testImplementation("org.verapdf:validation-model:1.30.1")
     testCompileOnly("org.jspecify:jspecify:1.0.0")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 
@@ -883,8 +883,13 @@ val jpackageImage =
                 jpackageOutputParent.get().asFile.absolutePath,
                 "--app-version",
                 project.version.toString(),
+                // Size the heap to the host instead of a fixed 2g: MaxRAMPercentage adapts
+                // to big and small machines alike (and respects container cgroup limits),
+                // so large scans get headroom on capable hosts without over-committing on
+                // small ones. For an enormous PDF on a constrained host, `--low-memory`
+                // additionally spills page streams to disk to keep heap bounded.
                 "--java-options",
-                "-Xmx2g",
+                "-XX:MaxRAMPercentage=75.0",
             )
         commandLine = if (hostOs.isWindows) jpackageArgs + "--win-console" else jpackageArgs
 
