@@ -5,7 +5,11 @@ import java.nio.file.Path;
 import java.util.Objects;
 
 public record SpreadOptions(
-    Path sourcePath, Path outputPath, ReadingDirection direction, boolean coverSingle) {
+    Path sourcePath,
+    Path outputPath,
+    ReadingDirection direction,
+    boolean coverSingle,
+    boolean pdfA) {
   public SpreadOptions {
     Objects.requireNonNull(sourcePath, "sourcePath must not be null");
     Objects.requireNonNull(outputPath, "outputPath must not be null");
@@ -14,7 +18,7 @@ public record SpreadOptions(
 
   public static SpreadOptions withDefaults(Path sourcePath) {
     return new SpreadOptions(
-        sourcePath, deriveOutputPath(sourcePath), ReadingDirection.DEFAULT, false);
+        sourcePath, deriveOutputPath(sourcePath), ReadingDirection.DEFAULT, false, false);
   }
 
   private static Path deriveOutputPath(Path source) {

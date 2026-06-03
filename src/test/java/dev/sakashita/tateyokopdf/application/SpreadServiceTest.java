@@ -51,7 +51,7 @@ final class SpreadServiceTest {
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     var opt =
         new SpreadOptions(
-            tmp.resolve("missing.pdf"), tmp.resolve("out.pdf"), ReadingDirection.RTL, false);
+            tmp.resolve("missing.pdf"), tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false);
     assertThatThrownBy(() -> service.execute(opt))
         .isInstanceOfSatisfying(
             SpreadException.class, ex -> assertThat(ex.kind()).isEqualTo(ErrorKind.PDF_NOT_FOUND));
@@ -72,7 +72,7 @@ final class SpreadServiceTest {
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
     service.execute(
-        new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false));
+        new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false));
 
     var events = listener.events();
     assertThat(events).hasSize(4); // Start + 2 SpreadComplete + Complete
@@ -102,7 +102,7 @@ final class SpreadServiceTest {
             () ->
                 service.execute(
                     new SpreadOptions(
-                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false)))
+                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false)))
         .isInstanceOf(SpreadException.class);
 
     verify(source).close();
@@ -122,7 +122,7 @@ final class SpreadServiceTest {
 
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, PdfPostProcessor.noOp(), listener);
-    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false));
+    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, false));
 
     InOrder ord = inOrder(output);
     ord.verify(output).addSpread(any(), any());
@@ -142,7 +142,7 @@ final class SpreadServiceTest {
 
     var listener = new CapturingProgressListener();
     var service = new SpreadService(factory, calc, postProcessor, listener);
-    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false));
+    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, false));
 
     // Order matters: the SpreadDocument must close (file handle release) and
     // save() must finish before qpdf opens the file; onComplete is the terminal
@@ -174,9 +174,50 @@ final class SpreadServiceTest {
             () ->
                 service.execute(
                     new SpreadOptions(
-                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false)))
+                        inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false)))
         .isInstanceOf(SpreadException.class);
 
     verify(postProcessor, never()).process(any());
+  }
+
+  @Test
+  void finalizesPdfAAfterMetadataAndBeforeSaveWhenRequested(@TempDir Path tmp) throws Exception {
+    Path inputFile = Files.createFile(tmp.resolve("in.pdf"));
+    Path outputFile = tmp.resolve("out.pdf");
+    when(factory.openSource(inputFile)).thenReturn(source);
+    when(factory.createOutput()).thenReturn(output);
+    when(source.pageCount()).thenReturn(2);
+    when(source.pageDimension(anyInt())).thenReturn(new PageDimension(100f, 200f));
+    when(source.pageContent(0)).thenReturn(content0);
+    when(source.pageContent(1)).thenReturn(content1);
+
+    var service =
+        new SpreadService(factory, calc, PdfPostProcessor.noOp(), new CapturingProgressListener());
+    service.execute(new SpreadOptions(inputFile, outputFile, ReadingDirection.RTL, false, true));
+
+    // The XMP packet mirrors the info dictionary, so finalizePdfA must run after
+    // applyMetadata; and it mutates the document, so it must run before save.
+    InOrder ord = inOrder(output);
+    ord.verify(output).applyMetadata(any(), any(), any());
+    ord.verify(output).finalizePdfA();
+    ord.verify(output).save(eq(outputFile));
+  }
+
+  @Test
+  void skipsPdfAFinalizationByDefault(@TempDir Path tmp) throws Exception {
+    Path inputFile = Files.createFile(tmp.resolve("in.pdf"));
+    when(factory.openSource(inputFile)).thenReturn(source);
+    when(factory.createOutput()).thenReturn(output);
+    when(source.pageCount()).thenReturn(2);
+    when(source.pageDimension(anyInt())).thenReturn(new PageDimension(100f, 200f));
+    when(source.pageContent(0)).thenReturn(content0);
+    when(source.pageContent(1)).thenReturn(content1);
+
+    var service =
+        new SpreadService(factory, calc, PdfPostProcessor.noOp(), new CapturingProgressListener());
+    service.execute(
+        new SpreadOptions(inputFile, tmp.resolve("out.pdf"), ReadingDirection.RTL, false, false));
+
+    verify(output, never()).finalizePdfA();
   }
 }

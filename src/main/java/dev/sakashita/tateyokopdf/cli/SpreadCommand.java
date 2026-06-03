@@ -77,9 +77,10 @@ public final class SpreadCommand {
       @Nullable String directionValue = cmd.getOptionValue("direction");
       ReadingDirection direction = parseDirection(directionValue != null ? directionValue : "RTL");
       boolean coverSingle = cmd.hasOption("cover-single");
+      boolean pdfA = cmd.hasOption("pdf-a");
       @Nullable String outputOpt = cmd.getOptionValue("output");
 
-      return execute(InputResolver.resolve(positionals), outputOpt, direction, coverSingle);
+      return execute(InputResolver.resolve(positionals), outputOpt, direction, coverSingle, pdfA);
     } catch (ParseException e) {
       System.err.println("Error: " + e.getMessage());
       printHelp(System.err);
@@ -96,7 +97,8 @@ public final class SpreadCommand {
       InputResolver.Resolved resolved,
       @Nullable String outputOpt,
       ReadingDirection direction,
-      boolean coverSingle)
+      boolean coverSingle,
+      boolean pdfA)
       throws IOException, ParseException {
 
     DocumentFactory factory = new PdfBoxDocumentFactory();
@@ -108,7 +110,7 @@ public final class SpreadCommand {
           (outputOpt == null || "-".equals(outputOpt))
               ? OutputTarget.stdout()
               : OutputTarget.file(Path.of(outputOpt));
-      convertStdin(factory, calculator, postProcessor, target, direction, coverSingle);
+      convertStdin(factory, calculator, postProcessor, target, direction, coverSingle, pdfA);
       return CliExitCodes.OK;
     }
 
@@ -128,6 +130,7 @@ public final class SpreadCommand {
           singleOutput(input, outputOpt),
           direction,
           coverSingle,
+          pdfA,
           null);
       return CliExitCodes.OK;
     }
@@ -150,6 +153,7 @@ public final class SpreadCommand {
             batchOutput(input, outDir),
             direction,
             coverSingle,
+            pdfA,
             label);
       } catch (Exception e) {
         failures++;
@@ -170,13 +174,15 @@ public final class SpreadCommand {
       PdfPostProcessor postProcessor,
       OutputTarget target,
       ReadingDirection direction,
-      boolean coverSingle)
+      boolean coverSingle,
+      boolean pdfA)
       throws IOException {
     Path tmpIn = Files.createTempFile("tate-yoko-in", ".pdf");
     try {
       // Files.copy(InputStream, ...) does not close System.in.
       Files.copy(System.in, tmpIn, StandardCopyOption.REPLACE_EXISTING);
-      convertFile(factory, calculator, postProcessor, tmpIn, target, direction, coverSingle, null);
+      convertFile(
+          factory, calculator, postProcessor, tmpIn, target, direction, coverSingle, pdfA, null);
     } finally {
       Files.deleteIfExists(tmpIn);
     }
@@ -190,13 +196,14 @@ public final class SpreadCommand {
       OutputTarget target,
       ReadingDirection direction,
       boolean coverSingle,
+      boolean pdfA,
       @Nullable String label)
       throws IOException {
 
     boolean toStdout = target.toStdout();
     Path realOut = toStdout ? Files.createTempFile("tate-yoko-out", ".pdf") : target.requireFile();
     try {
-      var options = new SpreadOptions(input, realOut, direction, coverSingle);
+      var options = new SpreadOptions(input, realOut, direction, coverSingle, pdfA);
       var service =
           new SpreadService(factory, calculator, postProcessor, new ConsoleProgressListener(label));
       service.execute(options);
@@ -294,6 +301,13 @@ public final class SpreadCommand {
             .desc("Treat the first page as a standalone cover spread")
             .get());
     options.addOption(
+        Option.builder()
+            .longOpt("pdf-a")
+            .desc(
+                "Emit PDF/A-2b for archiving (best-effort: adds the conformance structure;"
+                    + " full validity depends on the source PDF's content)")
+            .get());
+    options.addOption(
         Option.builder("v")
             .longOpt("verbose")
             .desc("Enable verbose logging output (DEBUG level)")
@@ -317,6 +331,7 @@ public final class SpreadCommand {
                                       (default: <input>_spread.pdf)
           -d, --direction <RTL|LTR>   Reading direction (default: RTL)
               --cover-single          Treat the first page as a standalone cover spread
+              --pdf-a                 Emit PDF/A-2b for archiving (best-effort; see docs)
           -v, --verbose               Enable verbose (DEBUG) logging
           -h, --help                  Show this help and exit
               --version               Print version and exit

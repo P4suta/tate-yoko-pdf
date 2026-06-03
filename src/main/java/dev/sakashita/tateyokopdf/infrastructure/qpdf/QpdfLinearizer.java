@@ -33,6 +33,11 @@ import org.slf4j.LoggerFactory;
  *   <li>{@code --min-version=X.Y} — rewrites the {@code %PDF-x.x} header byte to match {@link
  *       PdfOutputPolicy#TARGET}. PDFBox's {@code setVersion} updates only the catalog {@code
  *       /Version} entry for any value &ge; 1.4, so the header bump must happen here.
+ *   <li>{@code --newline-before-endstream} — guarantees every stream object carries an EOL marker
+ *       before the {@code endstream} keyword, which PDF/A (ISO 19005 clause 6.1.7.1) mandates.
+ *       Harmless for ordinary output (a single extra byte per stream); required to keep {@code
+ *       --pdf-a} files valid <em>after</em> linearisation, since linearisation otherwise repacks
+ *       streams without that marker.
  * </ul>
  *
  * <p>The binary is resolved in this order:
@@ -112,6 +117,7 @@ public final class QpdfLinearizer implements PdfPostProcessor {
         new ProcessBuilder(
                 qpdfBinary.toString(),
                 "--linearize",
+                "--newline-before-endstream",
                 "--min-version=" + targetVersion.label(),
                 path.toString(),
                 tmpOut.toString())

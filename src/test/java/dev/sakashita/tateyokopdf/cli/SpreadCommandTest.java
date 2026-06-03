@@ -77,6 +77,15 @@ final class SpreadCommandTest {
   }
 
   @Test
+  void pdfAFlagAccepted(@TempDir Path tmp) throws Exception {
+    Path input = PdfFixtures.blankPages(tmp, "in.pdf", 2);
+    Path output = tmp.resolve("out.pdf");
+    Captured c = run(input.toString(), "-o", output.toString(), "--pdf-a");
+    assertThat(c.code()).isZero();
+    assertThat(Files.exists(output)).isTrue();
+  }
+
+  @Test
   void ltrDirectionAccepted(@TempDir Path tmp) throws Exception {
     Path input = PdfFixtures.multiPageA4(tmp, "in.pdf", 2);
     Path output = tmp.resolve("out.pdf");

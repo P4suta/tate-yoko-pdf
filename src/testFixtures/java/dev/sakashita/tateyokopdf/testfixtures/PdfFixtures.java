@@ -30,6 +30,21 @@ public final class PdfFixtures {
     return path;
   }
 
+  /**
+   * N ページの空白 A4 PDF (コンテンツストリーム・フォントなし)。フォント未埋め込みの Standard 14 を使う {@link #multiPageA4}
+   * と違い、フォント・デバイス色を持たないので PDF/A 適合のグリーンパス検証に使える。
+   */
+  public static Path blankPages(Path dir, String name, int pages) throws IOException {
+    Path path = dir.resolve(name);
+    try (PDDocument doc = new PDDocument()) {
+      for (int i = 0; i < pages; i++) {
+        doc.addPage(new PDPage(PDRectangle.A4));
+      }
+      doc.save(path.toFile());
+    }
+    return path;
+  }
+
   /** 異なるページサイズが混在した PDF (A4, A5, A3 をローテーション) */
   public static Path mixedSizes(Path dir, String name, int pages) throws IOException {
     Path path = dir.resolve(name);

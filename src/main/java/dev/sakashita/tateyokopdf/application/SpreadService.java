@@ -50,6 +50,10 @@ public class SpreadService {
       }
 
       output.applyMetadata(source.metadata(), Instant.now(), Producer.NAME);
+      if (options.pdfA()) {
+        // After applyMetadata so the PDF/A XMP packet can mirror the info dictionary.
+        output.finalizePdfA();
+      }
       output.save(options.outputPath());
     }
     // Post-processing runs *after* the SpreadDocument is closed so the file

@@ -10,17 +10,21 @@ import dev.sakashita.tateyokopdf.domain.exception.ErrorKind;
 import dev.sakashita.tateyokopdf.domain.exception.SpreadException;
 import dev.sakashita.tateyokopdf.domain.model.DocumentMetadata;
 import dev.sakashita.tateyokopdf.domain.model.LayoutPosition;
+import dev.sakashita.tateyokopdf.domain.model.PdfVersion;
 import dev.sakashita.tateyokopdf.domain.model.SpreadSpec;
 import dev.sakashita.tateyokopdf.port.PagePlacement;
 import dev.sakashita.tateyokopdf.port.SourceDocument;
 import dev.sakashita.tateyokopdf.port.SpreadDocument;
 import dev.sakashita.tateyokopdf.testfixtures.PdfFixtures;
+import java.io.ByteArrayInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import org.apache.pdfbox.Loader;
+import org.apache.xmpbox.XMPMetadata;
+import org.apache.xmpbox.xml.DomXmpParser;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -120,6 +124,58 @@ final class PdfBoxSpreadDocumentTest {
       assertThat(info.getModificationDate().toInstant()).isEqualTo(modDate);
       assertThat(info.getProducer()).isEqualTo("tate-yoko-pdf");
       assertThat(doc.getDocumentCatalog().getLanguage()).isEqualTo("ja-JP");
+    }
+  }
+
+  @Test
+  void finalizePdfAAddsSrgbOutputIntentAndPdfAidXmpMirroringInfo(@TempDir Path tmp)
+      throws Exception {
+    var source =
+        new DocumentMetadata(
+            Optional.of("題名"),
+            Optional.of("著者"),
+            Optional.of("概要"),
+            Optional.of("k1, k2"),
+            Optional.of("作成ツール"),
+            Optional.of(Instant.parse("2024-04-01T12:00:00Z")),
+            Optional.of("ja-JP"));
+    Path inputPdf = PdfFixtures.blankPages(tmp, "in.pdf", 2);
+    Path output = tmp.resolve("out.pdf");
+    try (SourceDocument src = factory.openSource(inputPdf);
+        SpreadDocument out = factory.createOutput()) {
+      out.addSpread(
+          new SpreadSpec(1190f, 842f),
+          List.of(
+              new PagePlacement(src.pageContent(0), new LayoutPosition(595f, 0f)),
+              new PagePlacement(src.pageContent(1), new LayoutPosition(0f, 0f))));
+      out.applyMetadata(source, Instant.parse("2026-05-27T09:00:00Z"), "tate-yoko-pdf");
+      out.finalizePdfA();
+      out.save(output);
+    }
+
+    try (var doc = Loader.loadPDF(output.toFile())) {
+      var intents = doc.getDocumentCatalog().getOutputIntents();
+      assertThat(intents).hasSize(1);
+      assertThat(intents.get(0).getOutputConditionIdentifier()).isEqualTo("sRGB IEC61966-2.1");
+
+      byte[] xmpBytes = doc.getDocumentCatalog().getMetadata().toByteArray();
+      XMPMetadata xmp = new DomXmpParser().parse(new ByteArrayInputStream(xmpBytes));
+      var id = xmp.getPDFAIdentificationSchema();
+      assertThat(id.getPart()).isEqualTo(2);
+      assertThat(id.getConformance()).isEqualTo("B");
+      // XMP must mirror the info dictionary that applyMetadata populated.
+      assertThat(xmp.getDublinCoreSchema().getTitle()).isEqualTo("題名");
+      assertThat(xmp.getAdobePDFSchema().getProducer()).isEqualTo("tate-yoko-pdf");
+    }
+  }
+
+  @Test
+  void finalizePdfARejectsNonPdf17OutputVersion() {
+    // PDF/A-2 is built on PDF 1.7; refuse to stamp pdfaid onto a 2.0 document.
+    try (var doc = new PdfBoxSpreadDocument(PdfVersion.PDF_2_0)) {
+      assertThatThrownBy(doc::finalizePdfA)
+          .isInstanceOfSatisfying(
+              SpreadException.class, ex -> assertThat(ex.kind()).isEqualTo(ErrorKind.INTERNAL));
     }
   }
 
