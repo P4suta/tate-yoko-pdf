@@ -20,7 +20,7 @@ dependencies {
 
     // veraPDF greenfield validator — independently confirms the emitted file is genuinely PDF/A-2b,
     // not merely tagged as such. Test-only; brings its own (non-PDFBox) parser.
-    testImplementation("org.verapdf:validation-model:1.30.1")
+    testImplementation("org.verapdf:validation-model:1.30.2")
     testImplementation(testFixtures(project(":infrastructure")))
     testImplementation(testFixtures(project(":application")))
 }
