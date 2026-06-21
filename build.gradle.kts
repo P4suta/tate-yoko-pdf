@@ -24,7 +24,7 @@ buildscript {
 plugins {
     base
     id("com.github.ben-manes.versions") version "0.54.0"
-    id("org.openrewrite.rewrite") version "7.34.0"
+    id("org.openrewrite.rewrite") version "7.35.0"
     id("com.gradleup.shadow") version "9.4.2" apply false
     id("info.solidsoft.pitest") version "1.19.0" apply false
 }
@@ -60,7 +60,7 @@ rewrite {
 }
 
 dependencies {
-    rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.36.0")
+    rewrite("org.openrewrite.recipe:rewrite-static-analysis:2.37.0")
 }
 
 // ---- `just outdated` plumbing -------------------------------------------------
