@@ -14,7 +14,7 @@ dependencies {
     // xmpbox ships with PDFBox and shares its version — it builds the pdfaid / Dublin Core / Adobe
     // PDF XMP packet required for PDF/A conformance.
     implementation("org.apache.pdfbox:xmpbox:3.0.7")
-    implementation("ch.qos.logback:logback-classic:1.5.34")
+    implementation("ch.qos.logback:logback-classic:1.5.37")
 
     // PdfFixtures builds real PDFs with PDFBox for tests across modules.
     testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
