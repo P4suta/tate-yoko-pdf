@@ -7,5 +7,5 @@ plugins {
 dependencies {
     // Maps domain exceptions to exit codes / log levels; sanitises paths. Knows only the domain.
     implementation(project(":domain"))
-    implementation("ch.qos.logback:logback-classic:1.5.34")
+    implementation("ch.qos.logback:logback-classic:1.5.38")
 }

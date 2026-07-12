@@ -12,7 +12,7 @@ dependencies {
     implementation(project(":domain"))
     implementation(project(":port"))
     // SLF4J via the logback binding, matching the single-module classpath. Domain stays log-free.
-    implementation("ch.qos.logback:logback-classic:1.5.34")
+    implementation("ch.qos.logback:logback-classic:1.5.38")
 }
 
 pitest {

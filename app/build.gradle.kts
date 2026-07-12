@@ -16,7 +16,7 @@ dependencies {
     implementation(project(":infrastructure"))
     implementation(project(":observability"))
     implementation("commons-cli:commons-cli:1.11.0")
-    implementation("ch.qos.logback:logback-classic:1.5.34")
+    implementation("ch.qos.logback:logback-classic:1.5.38")
 
     // veraPDF greenfield validator — independently confirms the emitted file is genuinely PDF/A-2b,
     // not merely tagged as such. Test-only; brings its own (non-PDFBox) parser.

@@ -10,14 +10,14 @@ plugins {
 dependencies {
     implementation(project(":domain"))
     implementation(project(":port"))
-    implementation("org.apache.pdfbox:pdfbox:3.0.7")
+    implementation("org.apache.pdfbox:pdfbox:3.0.8")
     // xmpbox ships with PDFBox and shares its version — it builds the pdfaid / Dublin Core / Adobe
     // PDF XMP packet required for PDF/A conformance.
-    implementation("org.apache.pdfbox:xmpbox:3.0.7")
-    implementation("ch.qos.logback:logback-classic:1.5.34")
+    implementation("org.apache.pdfbox:xmpbox:3.0.8")
+    implementation("ch.qos.logback:logback-classic:1.5.38")
 
     // PdfFixtures builds real PDFs with PDFBox for tests across modules.
-    testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.7")
+    testFixturesImplementation("org.apache.pdfbox:pdfbox:3.0.8")
     testFixturesImplementation("org.jspecify:jspecify:1.0.0")
 }
 
